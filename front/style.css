@@ -540,6 +540,23 @@ table.lead-table tbody tr:focus { outline: 2px solid var(--c-primary); outline-o
 .chip-matriz    { background: var(--c-secondary); color: #fff; font-size: 10px; padding: 2px 7px; border-radius: 4px; margin-left: 6px; text-transform: uppercase; }
 .chip-filial    { background: #E9ECEF; color: #495057; font-size: 10px; padding: 2px 7px; border-radius: 4px; margin-left: 6px; text-transform: uppercase; }
 
+/* ---------- layout Ficha Avançada (match mockup: 2 colunas / resumo) ---------- */
+.grid-2col       { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap: 16px; align-items: start; }
+.aside-col       { display: flex; flex-direction: column; gap: 16px; }
+.resume-card     { background: #fff; border: 1px solid var(--c-border); border-radius: var(--r-md); padding: 14px 16px; }
+.resume-card .pj-cab { color: var(--c-secondary); }
+.socio-list      { border-top: 1px dashed var(--c-border); padding-top: 6px; }
+.pj-list         { display: flex; flex-direction: column; gap: 6px; }
+.pj-end          { border-top: 1px dashed var(--c-primary-border); padding-top: 8px; }
+@media (max-width: 920px) { .grid-2col { grid-template-columns: 1fr; } }
+
+/* cabeçalho do médico sem custo no lado direito */
+.ficha-cab-basica { grid-template-columns: 56px minmax(0,1fr); }
+.lead-table td .lead-esp .lead-sub { font-size: 11px; color: var(--c-muted); margin-top: 2px; }
+.ficha-cab-basica .ficha-custo { display: none; }
+.ficha-cab-basica .ficha-nome h1 { font-size: 22px; }
+.ficha-nav { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 12px 14px; background: transparent; }
+
 /* skeleton shimmer */
 .skeleton-row {
   background: linear-gradient(90deg,#F1F5F9 0%,#E9ECEF 50%,#F1F5F9 100%);

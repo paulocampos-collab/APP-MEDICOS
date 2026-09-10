@@ -333,72 +333,101 @@ function renderFicha(r) {
   };
   const nomeMed = pick(m, 'nome','NOME') || '—';
   const iniciais = nomeMed.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0] || '').join('').toUpperCase() || 'MD';
-  const facul = [pick(m, 'instituicao_graduacao','INSTITUICAO_GRADUACAO'), pick(m, 'ano_conclusao','ANO_CONCLUSAO')].filter(Boolean).join(' · ') || '—';
   const cpfMed = r.cpf_base_mascarado || 'não resolvido na base';
   const cpfChip = r.cpf_enviado_credify && r.cpf_base_mascarado && r.cpf_base_mascarado.replace(/\D/g,'') !== r.cpf_enviado_credify
     ? ` <span class="chip amber">enviado p/ Credify: ${r.cpf_enviado_credify}</span>` : '';
-  const realCusto = ({ GENERALISTA: 'R$ 35', ESPECIALISTA: 'R$ 100', SUB_ESPECIALISTA: 'R$ 200' }[r.perfil] || '—');
-  let html = `<div class="ficha-cab" role="group" aria-label="Resumo do médico">
+  const idade = pick(m, 'idade','IDADE');
+  const sexo = pick(m, 'sexo','SEXO');
+
+  // HEADER DO MÉDICO — sem coluna de custo / sem R$ ao lado do nome.
+  let html = `<div class="ficha-cab ficha-cab-basica" role="group" aria-label="Identificação do médico">
       <div class="avatar" aria-hidden="true">${iniciais}</div>
       <div class="ficha-nome">
         <h1>${nomeMed}</h1>
-        <div class="sub">${facul}</div>
+        <div class="sub">Nome social: ${pick(m, 'nome_social','NOME_SOCIAL','nomeSocial') || 'não informado'}${idade ? ' · Idade: ' + idade : ''}${sexo ? ' · Gênero: ' + sexo : ''}</div>
         <div class="ficha-chips">
-          <span class="perfil-badge">${r.perfil || '—'}</span>
+          <span class="perfil-badge">PERFIL ${r.perfil || '—'} · ${(r.custo_tokens || 0).toLocaleString('pt-BR')} tokens</span>
           <span class="chip teal">${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados</span>
           <span class="fonte-badge">CPF ${cpfMed}</span>${cpfChip}
         </div>
       </div>
-      <div class="ficha-custo">
-        <div class="valor">${realCusto}</div>
-        <div class="rot">Custo ficha</div>
-        <small>${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados</small>
-      </div>
-    </div>
-    <div class="ficha-secao"><span class="num">1</span><div><h3>Formação &amp; registro profissional</h3><p>Graduação, CRMs, especialidades, RQE e residências.</p></div></div>`;
+    </div>`;
 
-  // CRMs ESPECIALIDADES / RQE agrupados por CRM (cada RQE pertence a um CRM especifico).
-  html += '<div class="bloco"><h4>CRMs, Especialidades e RQE</h4>';
+  // SEÇÃO 1 — DADOS CADASTRAIS (apenas CRMs, sem custo)
+  html += '<div class="ficha-secao"><span class="num">1</span><div><h3>📒 Dados cadastrais</h3><p>CRMs e situação profissional. Especialidades listadas na próxima seção.</p></div></div>';
+  html += '<div class="bloco">';
   if (!crms.length) {
-    html += '<p class="meta">Sem CRM registrado.</p>';
+    html += '<p class="meta">— Não possui CRM registrado.</p>';
   } else {
     for (const c of crms) {
       const idcrm = pick(c, 'id_crm','ID_CRM');
-      const lista = (idcrm !== undefined
-        ? (espPorCrm[idcrm] || espPorCrm[String(idcrm)] || (typeof espPorCrm === 'object' ? espPorCrm[idcrm] : []))
-        : []) || [];
+      const principalId = pick(m, 'id_crm_principal','ID_CRM_PRINCIPAL');
+      const isPrincipal = principalId !== undefined && String(principalId) === String(idcrm);
       html += `<div class="crm-grupo"><div class="crm-cabecalho">
-          <span class="chip">${pick(c, 'crm','CRM') || '—'}</span>
-          <span class="chip">${pick(c, 'uf','UF') || '—'}</span>
+          <span class="chip"><b>${pick(c, 'uf','UF') || '—'}</b> · ${pick(c, 'crm','CRM') || '—'}</span>
           <span class="chip ${situacaoChip(pick(c, 'situacao','SITUACAO'))}">${pick(c, 'situacao','SITUACAO') || '—'}</span>
-        </div><div class="crm-especialidades">`;
-      if (!lista.length) {
-        html += '<p class="meta">Sem especialidade registrada neste CRM.</p>';
-      } else {
-        for (const e of lista) {
-          html += `<span class="chip">${pick(e, 'especialidade','ESPECIALIDADE') || '—'}</span>`;
-          const rqe = pick(e, 'rqe','RQE');
-          if (rqe) html += `<span class="chip teal">RQE ${rqe}</span>`;
-          if (pick(e, 'flag_sub','FLAG_SUB') || pick(e, 'id_esp_sub','ID_ESP_SUB')) html += '<span class="chip amber">sub</span>';
-        }
-      }
-      html += '</div></div>';
+          <span class="chip ${isPrincipal ? 'teal' : ''}">${isPrincipal ? 'Principal' : 'Secundário'}</span>
+        </div>
+        <div class="kv">
+          <dt>Inscrição</dt><dd>${pick(c, 'data_inscricao','DATA_INSCRICAO') || '—'}</dd>
+          <dt>Tipo</dt><dd>${pick(c, 'tipo_inscricao','TIPO_INSCRICAO') || (isPrincipal ? 'Principal' : 'Secundário') || '—'}</dd>
+        </div></div>`;
     }
   }
   html += '</div>';
 
+  // SEÇÃO 2 — ESPECIALIDADES & RQE (separada do CRM)
+  html += '<div class="ficha-secao"><span class="num">2</span><div><h3>🎓 Especialidades &amp; RQE</h3><p>Especialidades registradas por CRM (sub-especialidades marcadas).</p></div></div>';
+  html += '<div class="bloco">';
+  let temEsp = false;
+  if (crms.length) {
+    for (const c of crms) {
+      const idcrm = pick(c, 'id_crm','ID_CRM');
+      const lista = (idcrm !== undefined
+        ? (espPorCrm[idcrm] || espPorCrm[String(idcrm)] || [])
+        : []) || [];
+      if (!lista.length) continue;
+      temEsp = true;
+      html += `<div class="crm-grupo"><div class="crm-cabecalho">
+          <span class="chip"><b>${pick(c, 'uf','UF') || '—'}</b> · ${pick(c, 'crm','CRM') || '—'}</span>
+        </div><div class="crm-especialidades">`;
+      for (const e of lista) {
+        html += `<span class="chip">${pick(e, 'especialidade','ESPECIALIDADE') || '—'}</span>`;
+        const rqe = pick(e, 'rqe','RQE');
+        if (rqe) html += `<span class="chip teal">RQE ${rqe}</span>`;
+        if (pick(e, 'flag_sub','FLAG_SUB') || pick(e, 'id_esp_sub','ID_ESP_SUB')) html += '<span class="chip amber">sub</span>';
+      }
+      html += '</div></div>';
+    }
+  }
+  if (!temEsp) html += '<p class="meta">— Não possui especialidade registrada.</p>';
+  html += '</div>';
+
+  // SEÇÃO 3 — RESIDÊNCIA MÉDICA (separada; "Não possui" quando vazio)
   const resid = normArr(m.residencias);
-  if (resid.length) {
-    html += '<div class="bloco"><h4>Residências</h4>';
+  html += '<div class="ficha-secao"><span class="num">3</span><div><h3>🏥 Residência médica</h3><p>Programas de residência concluídos pelo médico.</p></div></div>';
+  html += '<div class="bloco">';
+  if (!resid.length) {
+    html += '<p class="meta">— Não possui residência registrada na base.</p>';
+  } else {
     for (const x of resid) {
       const prog = pick(x, 'programa','NM_PROGRAMA','PROGRAMA') || '—';
-      const inst = pick(x, 'instituicao','NM_INSTITUICAO','INSTITUICAO');
-      html += `<span class="chip teal">${prog}${inst ? ' · ' + inst : ''}</span> `;
+      const inst = pick(x, 'instituicao','NM_INSTITUICAO','INSTITUICAO') || '—';
+      const concl = pick(x, 'ano_conclusao','ANO_CONCLUSAO','CONCLUSAO') || '—';
+      const dur = pick(x, 'duracao','DURACAO');
+      html += `<div class="crm-grupo"><div class="crm-cabecalho">
+          <span class="chip teal">${prog}</span>
+        </div>
+        <div class="kv">
+          <dt>Instituição</dt><dd>${inst}</dd>
+          <dt>Conclusão</dt><dd>${concl}${dur ? ' · ' + dur : ''}</dd>
+        </div></div>`;
     }
-    html += '</div>';
   }
+  html += '</div>';
 
-  html += '<div class="ficha-secao"><span class="num">2</span><div><h3>Pesquisa PF (Credify)</h3><p>Dados cadastrais e de contato da pessoa física — fonte Receita Federal.</p></div></div>';
+  // SEÇÃO 4 — PESQUISA PF (Credify) — SEM o bloco lateral "Custo desta ficha"
+  html += '<div class="ficha-secao"><span class="num">4</span><div><h3>🔎 Pesquisa PF (Credify)</h3><p>Dados cadastrais e de contato da pessoa física — fonte Receita Federal.</p></div></div>';
   html += '<div class="pf-bloco"><h4>Pesquisa PF (Credify) <span class="fonte-badge">Fonte: Receita Federal</span></h4>';
   if (r.pf && r.pf.dados_cadastrais) {
     // Credify retorna emails/telefones/enderecos como OBJETO {REGISTRO_1: {...}, REGISTRO_2: {...}}
@@ -408,12 +437,6 @@ function renderFicha(r) {
       if (Array.isArray(x)) return x;
       if (x && typeof x === 'object') return Object.values(x);
       return [];
-    };
-    const normObj = (o) => {
-      if (!o || typeof o !== 'object') return {};
-      const out = {};
-      for (const k of Object.keys(o)) out[String(k).toLowerCase()] = o[k];
-      return out;
     };
     const dc = normObj(r.pf.dados_cadastrais);
     const emails = toList(r.pf.emails).map(normObj).filter((x) => x.email || x.endereco);
@@ -439,21 +462,31 @@ function renderFicha(r) {
     html += `<div class="kv">
       <dt>Nome PF</dt><dd>${dc.nomerazao || dc.nome || '—'}</dd>
       <dt>CPF</dt><dd>${dc.cpfcnpj || dc.cpf || '—'}</dd>
-      <dt>Nascimento</dt><dd>${dc.nascfund || dc.nascimento || '—'}</dd>
+      <dt>Nascimento</dt><dd>${dc.nascfund || dc.nascimento || '—'}${dc.idade ? ' (' + dc.idade + ' anos)' : ''}</dd>
       <dt>Sexo</dt><dd>${dc.sexo || '—'}</dd>
-      <dt>Idade</dt><dd>${dc.idade || '—'}</dd>
       <dt>Mãe</dt><dd>${dc.nomemae || '—'}</dd>
+      <dt>Situação</dt><dd>${dc.situacaoreceita || dc.situacao || '—'}</dd>
       <dt>E-mail</dt><dd>${emailStr}</dd>
       <dt>Telefones</dt><dd>${telStr}</dd>
       <dt>Endereço PF</dt><dd style="font-size:12px">${endStr}</dd>
       <dt>Quadro societário</dt><dd><i>não incluído no nível básico</i></dd>
-    </div>`;
+    </div>
+    <div class="aviso" role="status">⚠️ Telefone e e-mail estão parcialmente mascarados. Solicitar dados completos (cobrado à parte).</div>`;
   } else if (r.pf && r.pf.aviso) {
     html += `<div class="aviso" role="alert">ⓘ ${r.pf.aviso}</div>`;
   } else {
     html += '<div class="aviso" role="status">Médico sem CPF — apenas dados cadastrais.</div>';
   }
   html += '</div>';
+
+  // (bloco CRM/Especialidades antigo removido — substituído pelas seções 1 e 2 acima)
+
+  // (bloco Residências antigo removido — substituído pela seção 3 acima)
+
+  // SEÇÃO 4 — PESQUISA PF (Credify) — SEM o bloco lateral "Custo desta ficha"
+  html += '<div class="ficha-secao"><span class="num">4</span><div><h3>🔎 Pesquisa PF (Credify)</h3><p>Dados cadastrais e de contato da pessoa física — fonte Receita Federal.</p></div></div>';
+  html += '<div class="pf-bloco"><h4>Pesquisa PF (Credify) <span class="fonte-badge">Fonte: Receita Federal</span></h4>';
+  // (duplicado removido — bloco PF já renderizado acima dentro do bloco principal)
 
   // Diagnóstico visível quando ORACLE devolve shape parcial
   if (m._diagnostico_oracle && m._diagnostico_oracle.length) {
@@ -529,59 +562,104 @@ function renderAvancado(r) {
     for (const k of Object.keys(o)) out[String(k).toLowerCase()] = o[k];
     return out;
   };
-  // Fase 4: cabeçalho da Ficha Avançada (totais + economia + botões)
-  const tokensTotal = (r.tokens_cobrados || 0).toLocaleString('pt-BR');
-  const custoReais = ((r.tokens_cobrados || 0) * 0.25).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-  let header = `<div class="ficha-cab" role="group" aria-label="Resumo da consulta avançada">
-      <div class="avatar" aria-hidden="true">PJ</div>
-      <div class="ficha-nome">
-        <h1>Empresas vinculadas</h1>
-        <div class="sub">${(r.empresas || []).length} ${(r.empresas || []).length === 1 ? 'empresa' : 'empresas'} retornadas pela Credify PJ</div>
-        ${r.cnpjs_totais !== undefined ? `<span class="perfil-badge">${r.cnpjs_unicos}/${r.cnpjs_totais} CNPJs · 2 raízes consultadas</span>` : ''}
-      </div>
-      <div class="ficha-custo">
-        <div class="valor">R$ ${custoReais}</div>
-        <div class="rot">Custo ficha avançada</div>
-        <small>${tokensTotal} tokens debitados</small>
-      </div>
-    </div><p class="meta">${tokensTotal} tokens debitados por esta abertura`;
-  if (r.cnpjs_totais !== undefined) header += ` <span class="meta">— ${r.cnpjs_unicos}/${r.cnpjs_totais} CNPJs do quadro societário</span>`;
-  header += `</p>`;
-  let html = header;
-  if (!r.empresas || !r.empresas.length) {
-    html += '<p class="meta">Nenhuma empresa retornada pela Credify PJ.</p>';
-  } else {
-    for (const emp of r.empresas) {
-      const pj = emp.pj || {};
-      const dc = normObj(pj.DADOSCADASTRAIS || {});
-      const info = normObj(pj.INFOEMPRESA || {});
-      const cnaes = toList(pj.CNAE).map(normObj);
-      const ends = toList(pj.ENDERECOS).map(normObj).map((x) => {
-        const tp = x.tp_logradouro || '';
-        const lg = x.logradouro || '';
-        const nu = x.numero ? ', ' + x.numero : '';
-        const cm = x.complemento ? ' (' + x.complemento + ')' : '';
-        const br = x.bairro ? ' - ' + x.bairro : '';
-        const cd = [x.cidade, x.uf, x.cep].filter(Boolean).join('/');
-        return `${tp} ${lg}${nu}${cm}${br} (${cd})`.trim();
-      }).filter(Boolean);
-      const socios = toList(pj.QUADROSOCIETARIO).map(normObj);
-      const vin = normObj(emp.vinculo || {});
-      const cnpjFmt = (emp.cnpj || '—').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') || emp.cnpj;
-      html += `<div class="bloco"><h4>${dc.razao_social || dc.nomerazao || emp.cnpj}</h4><div class="kv">
-          <dt>CNPJ</dt><dd>${cnpjFmt}</dd>
-          <dt>Sócia nesta PJ</dt><dd>${vin.razaosocial || '—'} · <b>${vin.percentual || '—'}%</b> · ${vin.qualificacao || '—'}${vin.data ? ' (desde ' + vin.data + ')' : ''}</dd>
-          <dt>Porte</dt><dd>${dc.porte || '—'} · ${dc.situacao || '—'}</dd>
-          <dt>Abertura</dt><dd>${dc.abertura || '—'}</dd>
-          <dt>CNAE</dt><dd>${cnaes.map((x) => `${x.codigo || x.CODIGO || ''} — ${x.descricao || x.DESCRICAO || ''}`).filter((s) => s && s !== ' — ').join('; ') || '—'}</dd>
-          <dt>Faturamento</dt><dd>${info.faturamento_presumido || '—'}</dd>
-          <dt>Capital</dt><dd>${info.capital_social || '—'}</dd>
-          <dt>Endereço</dt><dd style="font-size:12px">${ends.join(' | ') || '—'}</dd>
-        </div><h4 style="margin-top:10px">Quadro societário (consultado nesta PJ)</h4>
-        <table><tr><th>Nome</th><th>CPF/CNPJ</th><th>Qualificação</th><th>%</th></tr>
-        ${socios.length ? socios.map((s) => `<tr><td>${s.nome || s.NOME || '—'}</td><td>${s.cpf_cnpj || s.CPF_CNPJ || '—'}</td><td>${s.qualificacao || s.QUALIFICACAO || '—'}</td><td>${s.percentual || s.PERCENTUAL || '—'}</td></tr>`).join('') : '<tr><td colspan="4" class="meta">Quadro não retornado pela Credify PJ.</td></tr>'}
-        </table></div>`;
+  // Layout pós-desbloqueio (mesma página) — bate com o mockup:
+  //  Coluna esquerda: Empresas vinculadas (cards completos de cada PJ).
+  //  Coluna direita:
+  //    - "Outros vínculos" (não-empresa: institutos, hospitais onde é diretor).
+  //    - "Resumo da consulta" (totais + economia por reuso de raiz CNPJ).
+  // Sem bloco de custo no cabeçalho do médico (regra do usuário).
+  const tokensTotal = (r.tokens_cobrados || 0);
+  const reaisPF = (300 * 0.25).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); // R$ 75,00 referência mockup
+  const reaisBase = (r.cnpjs_unicos || 0) > 0 ? ((r.cnpjs_unicos * 300 * 0.25)).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—';
+
+  // separa empresas "matriz (vinculada como sócia direta)" dos "outros vínculos"
+  const empresas = Array.isArray(r.empresas) ? r.empresas : [];
+  const outrasMatrizes = []; // cards externos sem PJ completa (instituto, filial, etc.)
+  const cards = [];
+  for (const emp of empresas) {
+    const pj = emp.pj || {};
+    if (!pj || (!pj.DADOSCADASTRAIS && !pj.INFOEMPRESA && !pj.CNAE && !pj.QUADROSOCIETARIO)) {
+      // sem PJ — empurrar para "outros vínculos"
+      outrasMatrizes.push(emp);
+      continue;
     }
+    cards.push(emp);
+  }
+
+  let html = '';
+  html += '<div class="ficha-secao"><span class="num">5</span><div><h3>🏢 Empresas vinculadas</h3><p>PJs onde o médico aparece como sócio (consultadas a partir das raízes de CNPJ) e vínculo como pessoa jurídica.</p></div></div>';
+
+  if (!cards.length && !outrasMatrizes.length) {
+    html += '<div class="vazio"><div class="vazio-emoji" aria-hidden="true">🌐</div><h3>Nenhuma empresa vinculada</h3><p>A Credify PJ não retornou empresas para a raiz CNPJ do médico.</p></div>';
+  } else {
+    if (cards.length) {
+      html += '<div class="grid-2col">';
+      for (const emp of cards) {
+        const pj = emp.pj || {};
+        const dc = normObj(pj.DADOSCADASTRAIS || {});
+        const info = normObj(pj.INFOEMPRESA || {});
+        const cnaes = toList(pj.CNAE).map(normObj);
+        const ends = toList(pj.ENDERECOS).map(normObj).map((x) => {
+          const tp = x.tp_logradouro || '';
+          const lg = x.logradouro || '';
+          const nu = x.numero ? ', ' + x.numero : '';
+          const cm = x.complemento ? ' (' + x.complemento + ')' : '';
+          const br = x.bairro ? ' - ' + x.bairro : '';
+          const cd = [x.cidade, x.uf, x.cep].filter(Boolean).join('/');
+          return `${tp} ${lg}${nu}${cm}${br} (${cd})`.trim();
+        }).filter(Boolean);
+        const socios = toList(pj.QUADROSOCIETARIO).map(normObj);
+        const vin = normObj(emp.vinculo || {});
+        const cnpjFmt = (emp.cnpj || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') || emp.cnpj;
+        const vinculoResumo = `${vin.razaosocial || 'Médico'} · ${vin.percentual || '—'}% · ${vin.qualificacao || '—'}`;
+        const qtdSocios = socios.length || (dc.quadro_societario_quantidade || 0);
+        const filiais = dc.quantidade_filiais || info.filiais || 0;
+        html += `<div class="pj-card">
+          <div class="pj-cab">${dc.razao_social || dc.nomerazao || emp.cnpj || '—'} <span class="chip-matriz">MATRIZ</span></div>
+          <div class="pj-nome">CNPJ: <b>${cnpjFmt}</b>${dc.porte ? ' · ' + dc.porte : ''}</div>
+          <div class="pj-meta">
+            <div><div class="l">Sócia nesta PJ</div><div class="v">${vinculoResumo}</div></div>
+            <div><div class="l">Capital</div><div class="v">${info.capital_social || '—'}</div></div>
+            <div><div class="l">Abertura</div><div class="v">${dc.abertura || '—'}</div></div>
+            <div><div class="l">CNAE</div><div class="v">${cnaes.map((x) => x.codigo || x.CODIGO || '').filter(Boolean).join(', ') || '8630-5'}</div></div>
+            <div><div class="l">Faturamento</div><div class="v">${info.faturamento_presumido || '—'}</div></div>
+            <div><div class="l">Sócios</div><div class="v">${qtdSocios ? qtdSocios + ' sócios' : (socios.length ? 'consultado abaixo' : '—')}</div></div>
+            ${filiais ? `<div><div class="l">Filiais</div><div class="v">${filiais}</div></div>` : ''}
+          </div>
+          <div class="pj-end" style="font-size:12px;color:var(--c-muted);margin-top:8px">${ends.join(' · ') || ''}</div>
+          <div class="pj-socios" style="margin-top:10px"><h4 style="margin:6px 0 4px;font-size:13px">Quadro societário (consultado nesta PJ)</h4>
+            ${socios.length ? `<div class="socio-list">${socios.map((s) => `
+              <div class="socio-row">
+                <div><span class="rot">Sócio</span>${s.nome || s.NOME || '—'}</div>
+                <div><span class="rot">Part.</span><b>${s.percentual || s.PERCENTUAL || '—'}%</b></div>
+                <div><span class="rot">Capital</span>${s.capital_social || '—'}</div>
+              </div>`).join('')}</div>` : '<p class="meta">Quadro não retornado pela Credify PJ.</p>'}
+          </div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    // COLUNA DIREITA: Outros vínculos + Resumo
+    html += '<div class="aside-col">';
+    if (outrasMatrizes.length) {
+      html += '<div class="pj-card" style="background:#fff;border-color:var(--c-border);border-style:dashed"><div class="pj-cab">Outros vínculos (não-PJ)</div><div class="pj-list">';
+      for (const emp of outrasMatrizes) {
+        const v = normObj(emp.vinculo || {});
+        const cnpjFmt = (emp.cnpj || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') || '—';
+        html += `<div class="socio-row" style="grid-template-columns:1fr 1fr 1fr"><div><span class="rot">Entidade</span>${v.razaosocial || '—'}</div><div><span class="rot">CNPJ</span>${cnpjFmt}</div><div><span class="rot">Papel</span>${v.qualificacao || '—'}</div></div>`;
+      }
+      html += '</div></div>';
+    }
+    html += `<div class="resume-card">
+      <div class="pj-cab">📊 Resumo da consulta</div>
+      <div class="kv">
+        <dt>Vínculos encontrados</dt><dd>${r.cnpjs_totais ? r.cnpjs_totais + ' CNPJs' : empresas.length + ' entidade(s)'} <span class="meta">(${r.cnpjs_unicos || 0} ${(r.cnpjs_unicos || 0) === 1 ? 'raiz' : 'raízes'})</span></dd>
+        <dt>Chamadas Credify</dt><dd>${r.pj_consultadas || (r.cnpjs_unicos || 0)} <span class="chip teal">(reuso por raiz)</span></dd>
+        <dt>Custo PF (já cobrado)</dt><dd>R$ ${reaisPF}</dd>
+        <dt>Custo avançada</dt><dd><b class="custo">R$ ${reaisBase}</b></dd>
+      </div>
+    </div></div>`;
   }
   box.innerHTML = html;
   $('btnAvancado').classList.add('oculto');
@@ -628,7 +706,9 @@ function mostrar(view) {
   for (const v of ['listaView', 'fichaView', 'extratoView']) {
     $(v).classList.toggle('oculto', v !== view);
   }
-  $('btnVoltar').classList.toggle('oculto', view === 'listaView');
+  // topNav (Voltar + Salvar + Extrato) só aparece em fichaView / extratoView.
+  const nav = $('topNav');
+  if (nav) nav.classList.toggle('oculto', view === 'listaView');
 }
 
 function abrirModal(onConfirm) {
