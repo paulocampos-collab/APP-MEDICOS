@@ -671,9 +671,15 @@ table.lead-table tbody tr:focus { outline: 2px solid var(--c-primary); outline-o
 .card-ficha table { width: 100%; border-collapse: collapse; margin-top: 8px; }
 .card-ficha table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--c-muted); border-bottom: 2px solid var(--c-border-strong); padding: 6px 8px; }
 .card-ficha table td { padding: 7px 8px; border-bottom: 1px solid var(--c-border); font-size: 13px; }
-.pf-bloco { margin-top: 12px; padding: 16px; background: linear-gradient(135deg, #FFF6F7 0%, #FBE7EA 100%); border-radius: var(--r-md); border: 1px solid var(--c-primary-border); }
+.pf-bloco { margin-top: 12px; padding: 18px 18px 14px; background: #fff; border-radius: var(--r-md); border: 1px solid var(--c-border); }
 .pf-bloco h3 { font-size: 13px; color: var(--c-secondary); text-transform: none; letter-spacing: 0; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
 .fonte-badge { background: #fff; color: var(--c-primary); font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; }
+.contato-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--c-border); }
+.contato-col { font-size: 13px; color: var(--c-text); }
+.contato-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--c-secondary); font-weight: 800; margin-bottom: 8px; }
+.contato-row { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; font-size: 13px; }
+.contato-row .emoji, .contato-row > span[aria-hidden] { font-size: 13px; }
+.contato-row .meta { font-size: 11px; color: var(--c-muted); text-transform: uppercase; letter-spacing: .3px; margin-right: 4px; }
 
 .bloco { border: 1px solid var(--c-border); border-radius: var(--r-md); padding: 16px; margin: 12px 0; background: #fff; }
 .kv    { display: grid; grid-template-columns: 160px 1fr; gap: 6px 14px; font-size: 14px; }

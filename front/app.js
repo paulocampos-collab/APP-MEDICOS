@@ -338,13 +338,19 @@ function renderFicha(r) {
     ? ` <span class="chip amber">enviado p/ Credify: ${r.cpf_enviado_credify}</span>` : '';
   const idade = pick(m, 'idade','IDADE');
   const sexo = pick(m, 'sexo','SEXO');
+  const faculdade = pick(m, 'instituicao_graduacao','INSTITUICAO_GRADUACAO');
+  const anoConclusao = pick(m, 'ano_conclusao','ANO_CONCLUSAO');
 
-  // HEADER DO MÉDICO — sem coluna de custo / sem R$ ao lado do nome.
+  // HEADER DO MÉDICO — alinha em colunas definidas (avatar | nome | faculdade).
+  // faculdade + ano conclusao vêm de dados_medico (não PF), e são mostrados ao
+  // lado do nome. Quando ausentes, "—" explicitamente.
   let html = `<div class="ficha-cab ficha-cab-basica" role="group" aria-label="Identificação do médico">
       <div class="avatar" aria-hidden="true">${iniciais}</div>
       <div class="ficha-nome">
         <h1>${nomeMed}</h1>
-        <div class="sub">Nome social: ${pick(m, 'nome_social','NOME_SOCIAL','nomeSocial') || 'não informado'}${idade ? ' · Idade: ' + idade : ''}${sexo ? ' · Gênero: ' + sexo : ''}</div>
+        <div class="sub">Nome social: ${pick(m, 'nome_social','NOME_SOCIAL','nomeSocial') || 'não informado'}</div>
+        <div class="sub">Idade: ${idade || '—'}${sexo ? ' · Gênero: ' + sexo : ''}</div>
+        <div class="sub">Faculdade: ${faculdade || '—'}${anoConclusao ? ' · Conclusão: ' + anoConclusao : ''}</div>
         <div class="ficha-chips">
           <span class="perfil-badge">PERFIL ${r.perfil || '—'} · ${(r.custo_tokens || 0).toLocaleString('pt-BR')} tokens</span>
           <span class="chip teal">${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados</span>
@@ -376,32 +382,39 @@ function renderFicha(r) {
   }
   html += '</div>';
 
-  // SEÇÃO 2 — ESPECIALIDADES & RQE (separada do CRM)
-  html += '<div class="ficha-secao"><span class="num">2</span><div><h3>🎓 Especialidades &amp; RQE</h3><p>Especialidades registradas por CRM (sub-especialidades marcadas).</p></div></div>';
-  html += '<div class="bloco">';
+  // SEÇÃO 2 — ESPECIALIDADES & RQE (lista única deduplicada por especialidade+rqe).
+  // Bruna tem Cardiologia em 3 CRMs (GO/MT/DF) com mesmo RQE 12979; sem dedupe
+  // aparecia 3×. Esta seção NÃO repete por estado — apenas lista o que existe.
+  html += '<div class="ficha-secao"><span class="num">2</span><div><h3>🎓 Especialidades &amp; RQE</h3><p>Lista única de especialidades registradas (sub-especialidades marcadas).</p></div></div>';
+  html += '<div class="bloco"><div class="crm-especialidades">';
   let temEsp = false;
-  if (crms.length) {
-    for (const c of crms) {
-      const idcrm = pick(c, 'id_crm','ID_CRM');
-      const lista = (idcrm !== undefined
-        ? (espPorCrm[idcrm] || espPorCrm[String(idcrm)] || [])
-        : []) || [];
-      if (!lista.length) continue;
-      temEsp = true;
-      html += `<div class="crm-grupo"><div class="crm-cabecalho">
-          <span class="chip"><b>${pick(c, 'uf','UF') || '—'}</b> · ${pick(c, 'crm','CRM') || '—'}</span>
-        </div><div class="crm-especialidades">`;
-      for (const e of lista) {
-        html += `<span class="chip">${pick(e, 'especialidade','ESPECIALIDADE') || '—'}</span>`;
-        const rqe = pick(e, 'rqe','RQE');
-        if (rqe) html += `<span class="chip teal">RQE ${rqe}</span>`;
-        if (pick(e, 'flag_sub','FLAG_SUB') || pick(e, 'id_esp_sub','ID_ESP_SUB')) html += '<span class="chip amber">sub</span>';
-      }
-      html += '</div></div>';
+  // mapa para deduplicar: chave = (especialidade + RQE) normalizadas.
+  const espSeen = new Set();
+  const espColecao = [];
+  const collect = (lista) => {
+    for (const e of lista) {
+      const esp = pick(e, 'especialidade','ESPECIALIDADE');
+      if (!esp) continue;
+      const rqe = pick(e, 'rqe','RQE') || '';
+      const key = String(esp).toUpperCase().trim() + '|' + String(rqe).trim();
+      if (espSeen.has(key)) continue;
+      espSeen.add(key);
+      espColecao.push(normObj(e));
     }
+  };
+  if (Array.isArray(espRaw)) collect(espRaw);
+  else if (espRaw && typeof espRaw === 'object') {
+    for (const lista of Object.values(espPorCrm)) collect(lista);
   }
-  if (!temEsp) html += '<p class="meta">— Não possui especialidade registrada.</p>';
-  html += '</div>';
+  for (const e of espColecao) {
+    temEsp = true;
+    html += `<span class="chip">${pick(e, 'especialidade','ESPECIALIDADE')}</span>`;
+    const rqe = pick(e, 'rqe','RQE');
+    if (rqe) html += `<span class="chip teal">RQE ${rqe}</span>`;
+    if (pick(e, 'flag_sub','FLAG_SUB') || pick(e, 'id_esp_sub','ID_ESP_SUB')) html += '<span class="chip amber">sub</span>';
+  }
+  if (!temEsp) html = '<div class="bloco"><p class="meta">— Não possui especialidade registrada.</p>';
+  html += '</div></div>';
 
   // SEÇÃO 3 — RESIDÊNCIA MÉDICA (separada; "Não possui" quando vazio)
   const resid = normArr(m.residencias);
@@ -426,67 +439,96 @@ function renderFicha(r) {
   }
   html += '</div>';
 
-  // SEÇÃO 4 — PESQUISA PF (Credify) — SEM o bloco lateral "Custo desta ficha"
-  html += '<div class="ficha-secao"><span class="num">4</span><div><h3>🔎 Pesquisa PF (Credify)</h3><p>Dados cadastrais e de contato da pessoa física — fonte Receita Federal.</p></div></div>';
-  html += '<div class="pf-bloco"><h4>Pesquisa PF (Credify) <span class="fonte-badge">Fonte: Receita Federal</span></h4>';
+  // SEÇÃO 4 — Receita Federal (PF) + dados de contato (uma seção só).
+  // Tudo vem de r.pf (dados_cadastrais + emails + telefones + enderecos).
+  // Label interno "pf_pesquisa" foi removido — nomes voltados ao usuário.
+  html += '<div class="ficha-secao"><span class="num">4</span><div><h3>🔎 Receita Federal (PF)</h3><p>Dados cadastrais e dados de contato da pessoa física.</p></div></div>';
+  html += '<div class="pf-bloco">';
   if (r.pf && r.pf.dados_cadastrais) {
-    // Credify retorna emails/telefones/enderecos como OBJETO {REGISTRO_1: {...}, REGISTRO_2: {...}}
-    // (não array). E tambem aceita o shape MOCK (lista de objetos). O helper
-    // `toList` normaliza os dois formatos para array de valores.
-    const toList = (x) => {
-      if (Array.isArray(x)) return x;
-      if (x && typeof x === 'object') return Object.values(x);
-      return [];
-    };
     const dc = normObj(r.pf.dados_cadastrais);
-    const emails = toList(r.pf.emails).map(normObj).filter((x) => x.email || x.endereco);
-    const tels = toList(r.pf.telefones).map(normObj);
-    const ends = toList(r.pf.enderecos).map(normObj);
-    const emailStr = emails.map((x) => x.email || x.endereco || '').filter(Boolean).join(', ') || '—';
-    const telStr = tels.map((x) => {
-      const ddd = x.ddd || '';
-      const num = x.telefone || x.numero || '';
-      if (!ddd && !num) return '';
-      const tipo = x.tipo_contato_telefone || x.tipo || '';
-      return `${tipo ? tipo + ': ' : ''}(${ddd}) ${num}`;
-    }).filter(Boolean).join(' · ') || '—';
-    const endStr = ends.map((x) => {
-      const tp = x.tp_logradouro || x.tipo || '';
-      const lg = x.logradouro || '';
-      const nu = x.numero ? ', ' + x.numero : '';
-      const cm = x.complemento ? ' (' + x.complemento + ')' : '';
-      const br = x.bairro ? ' - ' + x.bairro : '';
-      const cd = [x.cidade, x.uf, x.cep].filter(Boolean).join('/');
-      return `${tp} ${lg}${nu}${cm}${br} (${cd})`.trim();
-    }).filter(Boolean).join(' | ') || '—';
+    // Idade: preferimos o campo direto (CREDI idade), senão computamos a partir
+    // de NASCIMENTO (formato dd/mm/aaaa vindo do MOCK Credify).
+    let idadeStr = dc.idade || '';
+    if (!idadeStr && dc.nascimento) {
+      const m = String(dc.nascimento).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (m) {
+        const d = new Date(+m[3], +m[2] - 1, +m[1]);
+        const hoje = new Date();
+        let idade = hoje.getFullYear() - d.getFullYear();
+        if (hoje.getMonth() < d.getMonth() || (hoje.getMonth() === d.getMonth() && hoje.getDate() < d.getDate())) idade--;
+        if (idade >= 0 && idade < 130) idadeStr = idade + ' anos';
+      }
+    }
     html += `<div class="kv">
-      <dt>Nome PF</dt><dd>${dc.nomerazao || dc.nome || '—'}</dd>
+      <dt>Nome</dt><dd>${dc.nomerazao || dc.nome || '—'}</dd>
       <dt>CPF</dt><dd>${dc.cpfcnpj || dc.cpf || '—'}</dd>
-      <dt>Nascimento</dt><dd>${dc.nascfund || dc.nascimento || '—'}${dc.idade ? ' (' + dc.idade + ' anos)' : ''}</dd>
+      <dt>Nascimento</dt><dd>${dc.nascfund || dc.nascimento || '—'}${idadeStr ? ' · ' + idadeStr : ''}</dd>
       <dt>Sexo</dt><dd>${dc.sexo || '—'}</dd>
       <dt>Mãe</dt><dd>${dc.nomemae || '—'}</dd>
       <dt>Situação</dt><dd>${dc.situacaoreceita || dc.situacao || '—'}</dd>
-      <dt>E-mail</dt><dd>${emailStr}</dd>
-      <dt>Telefones</dt><dd>${telStr}</dd>
-      <dt>Endereço PF</dt><dd style="font-size:12px">${endStr}</dd>
       <dt>Quadro societário</dt><dd><i>não incluído no nível básico</i></dd>
-    </div>
-    <div class="aviso" role="status">⚠️ Telefone e e-mail estão parcialmente mascarados. Solicitar dados completos (cobrado à parte).</div>`;
+    </div>`;
+
+    // helper pt-BR (MOCK traz CAIXA ALTA; PROD pode vir minúsculo)
+    const fp = (obj, ...keys) => {
+      if (!obj) return undefined;
+      for (const k of keys) {
+        const vU = obj[String(k).toUpperCase()];
+        const vl = obj[String(k).toLowerCase()];
+        const v = vU !== undefined ? vU : vl;
+        if (v !== undefined && v !== null && v !== '') return v;
+      }
+      return undefined;
+    };
+    const emailsRaw = r.pf.emails;
+    const telsRaw = r.pf.telefones;
+    const endsRaw = r.pf.enderecos;
+    const emails = Array.isArray(emailsRaw) ? emailsRaw.map(normObj)
+      : (emailsRaw && typeof emailsRaw === 'object' ? Object.values(emailsRaw).map(normObj) : []);
+    const tels = Array.isArray(telsRaw) ? telsRaw.map(normObj)
+      : (telsRaw && typeof telsRaw === 'object' ? Object.values(telsRaw).map(normObj) : []);
+    const ends = Array.isArray(endsRaw) ? endsRaw.map(normObj)
+      : (endsRaw && typeof endsRaw === 'object' ? Object.values(endsRaw).map(normObj) : []);
+
+    const telBlocos = tels.map((t) => {
+      const ddd = fp(t, 'DDD','ddd');
+      const num = fp(t, 'NUMERO','numero','telefone');
+      const tipo = fp(t, 'TIPO','tipo','tipo_contato_telefone') || '';
+      if (!num && !ddd) return '';
+      const tStr = tipo ? `<span class="meta">${tipo}</span> ` : '';
+      return `<div class="contato-row"><span aria-hidden="true">📞</span>${tStr}(${ddd || '—'}) ${num || '—'}</div>`;
+    }).filter(Boolean).join('') || '<div class="contato-row"><span aria-hidden="true">📞</span>—</div>';
+
+    const emailBlocos = emails.map((em) => {
+      const addr = fp(em, 'ENDERECO','endereco','email') || '';
+      return addr ? `<div class="contato-row"><span class="emoji" aria-hidden="true">✉️</span>${addr}</div>` : '';
+    }).filter(Boolean).join('') || '<div class="contato-row"><span class="emoji" aria-hidden="true">✉️</span>—</div>';
+
+    const endBlocos = ends.map((e) => {
+      const lg = fp(e, 'LOGRADOURO','logradouro');
+      const br = fp(e, 'BAIRRO','bairro');
+      const cd = fp(e, 'CIDADE','cidade');
+      const uf = fp(e, 'UF','uf');
+      const cep = fp(e, 'CEP','cep');
+      const nu = fp(e, 'NUMERO','numero');
+      const cm = fp(e, 'COMPLEMENTO','complemento');
+      if (!lg && !cd) return '';
+      const endereco = [lg, nu].filter(Boolean).join(', ') + (cm ? ' (' + cm + ')' : '')
+        + (br ? ' — ' + br : '') + (cd ? ' — ' + cd : '') + (uf ? '/' + uf : '') + (cep ? ' · CEP ' + cep : '');
+      return `<div class="contato-row"><span class="emoji" aria-hidden="true">📍</span>${endereco}</div>`;
+    }).filter(Boolean).join('') || '<div class="contato-row"><span class="emoji" aria-hidden="true">📍</span>—</div>';
+
+    html += `<div class="contato-grid">
+      <div class="contato-col"><div class="contato-titulo">📞 Telefones</div>${telBlocos}</div>
+      <div class="contato-col"><div class="contato-titulo">✉️ E-mails</div>${emailBlocos}</div>
+      <div class="contato-col"><div class="contato-titulo">📍 Endereços</div>${endBlocos}</div>
+    </div>`;
   } else if (r.pf && r.pf.aviso) {
     html += `<div class="aviso" role="alert">ⓘ ${r.pf.aviso}</div>`;
   } else {
     html += '<div class="aviso" role="status">Médico sem CPF — apenas dados cadastrais.</div>';
   }
   html += '</div>';
-
-  // (bloco CRM/Especialidades antigo removido — substituído pelas seções 1 e 2 acima)
-
-  // (bloco Residências antigo removido — substituído pela seção 3 acima)
-
-  // SEÇÃO 4 — PESQUISA PF (Credify) — SEM o bloco lateral "Custo desta ficha"
-  html += '<div class="ficha-secao"><span class="num">4</span><div><h3>🔎 Pesquisa PF (Credify)</h3><p>Dados cadastrais e de contato da pessoa física — fonte Receita Federal.</p></div></div>';
-  html += '<div class="pf-bloco"><h4>Pesquisa PF (Credify) <span class="fonte-badge">Fonte: Receita Federal</span></h4>';
-  // (duplicado removido — bloco PF já renderizado acima dentro do bloco principal)
 
   // Diagnóstico visível quando ORACLE devolve shape parcial
   if (m._diagnostico_oracle && m._diagnostico_oracle.length) {
