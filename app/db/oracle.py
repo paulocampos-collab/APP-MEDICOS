@@ -23,7 +23,8 @@ def _get_pool():
                                    service_name=config.ORACLE_SERVICE)
         _pool = oracledb.create_pool(user=config.ORACLE_USER,
                                      password=config.ORACLE_PASSWORD,
-                                     dsn=dsn, min=1, max=5)
+                                     dsn=dsn, min=1, max=5,
+                                     tcp_connect_timeout=5)
     return _pool
 
 
