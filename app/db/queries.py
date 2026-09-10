@@ -138,35 +138,39 @@ def consultar_medicos_com_filtros(filtros=None, limite=50, offset=0):
 # Detalhe do médico (por ID — sempre pontual)
 # =========================================================================
 SQL_MEDICO = """
-SELECT ID_MEDICO, NOME, NOME_SOCIAL, CPF, ANO_CONCLUSAO,
-       INSTITUICAO_GRADUACAO
+SELECT id_medico, nome, nome_social, cpf, ano_conclusao, instituicao_graduacao
 FROM   credpf.credi01300_new
-WHERE  ID_MEDICO = :id
+WHERE  id_medico = :id
 """
 
+# Chaves em CAIXA BAIXA para casar exatamente com app/mock_data.py e
+# com o que o frontend (front/app.js -> renderFicha) lê. Sem isso,
+# renderFicha recebe 'CRM','UF','SITUACAO' (uppercase do Oracle) e imprime
+# 'undefined' em todas as colunas (bug visível na captura do cliente).
 SQL_CRMS = """
-SELECT ID_CRM, CRM, UF, SITUACAO, DT_PRIM_INSCRICAO_UF
+SELECT id_medico, id_crm, crm, uf, situacao, dt_prim_inscricao_uf
 FROM   credpf.credi01301
-WHERE  ID_MEDICO = :id
+WHERE  id_medico = :id
 """
 
 SQL_ESPECIALIDADES = """
-SELECT ID_ESPECIALIDADE, ID_CRM, ESPECIALIDADE, RQE, FLAG_SUB, ID_ESP_SUB
+SELECT id_especialidade, id_crm, especialidade, rqe, flag_sub, id_esp_sub
 FROM   credpf.credi01302
-WHERE  ID_CRM IN (SELECT ID_CRM FROM credpf.credi01301 WHERE ID_MEDICO = :id)
+WHERE  id_crm IN (SELECT id_crm FROM credpf.credi01301 WHERE id_medico = :id)
 """
 
 SQL_RESIDENCIAS = """
-SELECT ID_RESIDENCIA, NM_PROGRAMA, NM_INSTITUICAO, SG_UF, DT_INICIO, DT_TERMINO
+SELECT id_residencia, programa AS nm_programa, instituicao AS nm_instituicao,
+       sg_uf, dt_inicio, dt_termino
 FROM   credpf.credi01303
-WHERE  ID_MEDICO = :id
+WHERE  id_medico = :id
 """
 
 SQL_ENDERECOS = """
-SELECT NU_ADDR, CO_TYPE_ADDR, CO_TYPE_LOGR, DS_NAME_LOGR, CO_NUMB_LOGR,
-       DS_CMPL_LOGR, DS_DIST, DS_CITY, CO_STTE, CO_ZIPC
+SELECT id_medico, nu_addr, co_type_addr, co_type_logr, ds_name_logr,
+       co_numb_logr, ds_cmpl_logr, ds_dist, ds_city, co_stte, co_zipc
 FROM   Paulo.tmp_endereco_medico_principal
-WHERE  ID_MEDICO = :id
+WHERE  id_medico = :id
 """
 
 
