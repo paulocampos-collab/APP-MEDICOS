@@ -1,31 +1,36 @@
 import { carregarSaldo, buscarMedicos, fichaBasica, fichaAvancada } from './api.js';
 
 const $ = (id) => document.getElementById(id);
+const LIMITE = 50;
 let medicoAtual = null;
+let pagina = 0;
+let acumulado = [];
 
 document.addEventListener('DOMContentLoaded', () => {
   carregarSaldo().then(renderSaldo);
-  $('btnBuscar').addEventListener('click', buscar);
+  $('btnBuscar').addEventListener('click', () => buscar(true)); // reinicia a busca
+  $('btnMais').addEventListener('click', () => buscar(false));  // próxima página (50)
   $('btnVoltar').addEventListener('click', () => mostrar('listaView'));
   $('btnExtrato').addEventListener('click', verExtrato);
   $('btnAvancado').addEventListener('click', perguntarAvancado);
   $('modalNao').addEventListener('click', fecharModal);
-  buscar();
+  buscar(true);
 });
 
 function mostraErro(mensagem) {
   const box = $('listaLeads');
   if (box) box.innerHTML = `<div class="erro"><b>Falha na consulta.</b> ${mensagem}</div>`;
+  $('btnMais').classList.add('oculto');
 }
 
 function renderModo(data) {
   const el = $('modoBadge');
-  if (!el) return;
-  el.textContent = data && data.modo === 'oracle' ? 'ORACLE' : 'MOCK';
+  if (el) el.textContent = data && data.modo === 'oracle' ? 'ORACLE' : 'MOCK';
 }
 
-// ---------------- LISTA ----------------
-async function buscar() {
+// ---------------- LISTA (filtra no servidor · 50 por página) ----------------
+async function buscar(reiniciar) {
+  if (reiniciar) { pagina = 0; acumulado = []; }
   const f = {
     uf: $('fUf').value, cidade: $('fCidade').value,
     especialidade: $('fEspec').value, residencia: $('fResid').value,
@@ -33,24 +38,30 @@ async function buscar() {
     faixa_etaria: $('fFaixa').value,
     apenas_com_enriquecimento: $('fEnr').checked,
   };
-  const res = await buscarMedicos(f);
+  const res = await buscarMedicos(f, LIMITE, pagina * LIMITE);
   renderModo(res.data);
   if (!res.ok) {
     const det = (res.data && (res.data.detalhe || res.data.erro)) || '';
     mostraErro(`HTTP ${res.status || '?'} ${det}`);
     return;
   }
-  renderLeads(Array.isArray(res.data.resultados) ? res.data.resultados : [], res.data);
+  const novos = Array.isArray(res.data.resultados) ? res.data.resultados : [];
+  acumulado = acumulado.concat(novos);
+  if (novos.length) pagina++;
+  renderLeads(acumulado, res.data);
+  $('btnMais').classList.toggle('oculto', !res.data.tem_mais);
+  const info = $('infoLista');
+  if (info) info.textContent = `Exibindo ${acumulado.length} de ${res.data.total ?? acumulado.length} médicos`;
 }
 
 function renderLeads(leads, data) {
   const box = $('listaLeads');
-  box.innerHTML = '';
   if (data && data.erro) { mostraErro(`${data.erro} — ${data.detalhe || ''}`); return; }
   if (!leads.length) {
     box.innerHTML = '<p class="aviso">Nenhum médico encontrado com esses filtros.</p>';
     return;
   }
+  box.innerHTML = '';
   for (const l of leads) {
     const el = document.createElement('div');
     el.className = 'lead';

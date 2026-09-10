@@ -16,11 +16,13 @@ export async function carregarSaldo() {
   return o.data || {};
 }
 
-export async function buscarMedicos(filtros) {
+export async function buscarMedicos(filtros, limite = 50, offset = 0) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(filtros)) {
     if (v !== '' && v !== null && v !== undefined && v !== false) q.set(k, v);
   }
+  q.set('limite', limite);
+  q.set('offset', offset);
   return get(`${BASE}/medicos?${q.toString()}`);
 }
 

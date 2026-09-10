@@ -12,7 +12,7 @@ if config.USE_MOCK:
                                ENDERECOS, SIMULACOES_PF, SIMULACOES_PJ,
                                CPF_NAO_ENCONTRADO, CNPJ_NAO_ENCONTRADO)
 else:
-    from app.db.queries import (consultar_medicos as _consultar_medicos_oracle,
+    from app.db.queries import (consultar_medicos_com_filtros,
                                 consultar_medico, consultar_crms,
                                 consultar_especialidades, consultar_residencias,
                                 consultar_enderecos)
@@ -97,49 +97,35 @@ def _listar_medicos_mock(filtros):
 
 
 # =========================================================================
-# MODO ORACLE — SQL hardcoded em app/db/queries.py
+# MODO ORACLE — filtragem NO BANCO (WHERE dinâmico) + paginação
 # =========================================================================
-def _listar_medicos_oracle(filtros):
+def _listar_medicos_oracle(filtros, limite, offset):
+    rows, total = consultar_medicos_com_filtros(filtros, limite=limite, offset=offset)
     resultado = []
-    for r in _consultar_medicos_oracle():
+    for r in rows:
         uf = r.get("UF") or r.get("CO_STTE")
         cidade = r.get("DS_CITY")
         bairro = r.get("BAIRRO") or r.get("DS_DIST")
         esp = [p.strip() for p in (r.get("ESPECIALIDADES") or "").split(";") if p.strip()]
         resid = [x.strip() for x in (r.get("RESIDENCIAS") or "").split(";") if x.strip()]
-        situacao = r.get("SITUACAO_CRM")
-        cpf = r.get("CPF")
-
-        if filtros.get("uf") and filtros["uf"].upper() != (uf or "").upper():
-            continue
-        if filtros.get("cidade") and filtros["cidade"].upper() != (cidade or "").upper():
-            continue
-        if filtros.get("especialidade") and filtros["especialidade"].upper() not in [p.upper() for p in esp]:
-            continue
-        if filtros.get("residencia") and filtros["residencia"].upper() not in [x.upper() for x in resid]:
-            continue
-        if filtros.get("situacao_crm") and filtros["situacao_crm"].upper() != (situacao or "").upper():
-            continue
-        if filtros.get("apenas_com_enriquecimento") and not cpf:
-            continue
-
         resultado.append({
             "id_medico": r.get("ID_MEDICO"),
             "nome_anonimizado": mascara_nome(r.get("NOME")),
             "especialidades": esp or ["NAO_INFORMADO"],
             "cidade": cidade, "uf": uf, "bairro": bairro,
-            "situacao_crm": situacao,
+            "situacao_crm": r.get("SITUACAO_CRM"),
             "faixa_etaria": None, "sexo": None,  # dependem de staging (a evoluir)
-            "tem_enriquecimento": bool(cpf),
+            "tem_enriquecimento": bool(r.get("CPF")),
         })
-    return resultado
+    return resultado, total
 
 
-def listar_medicos(filtros=None):
+def listar_medicos(filtros=None, limite=50, offset=0):
     filtros = filtros or {}
     if config.USE_MOCK:
-        return _listar_medicos_mock(filtros)
-    return _listar_medicos_oracle(filtros)
+        todos = _listar_medicos_mock(filtros)
+        return todos[offset:offset + limite], len(todos)
+    return _listar_medicos_oracle(filtros, limite, offset)
 
 
 def detalhe_medico(id_medico):

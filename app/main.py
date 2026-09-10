@@ -42,6 +42,8 @@ def lista_medicos(
     sexo: str | None = Query(None),
     faixa_etaria: str | None = Query(None),
     apenas_com_enriquecimento: bool = Query(False),
+    limite: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ):
     filtros = {"uf": uf, "cidade": cidade, "especialidade": especialidade,
                "sub_especialidade": sub_especialidade, "residencia": residencia,
@@ -50,17 +52,21 @@ def lista_medicos(
                "apenas_com_enriquecimento": apenas_com_enriquecimento}
     ativos = {k: v for k, v in filtros.items() if v not in (None, False)}
     try:
-        resultados = repositorio.listar_medicos(ativos)
+        resultados, total = repositorio.listar_medicos(ativos, limite=limite, offset=offset)
     except Exception as e:  # ex.: falha de conexão Oracle -> JSON amigável, não 500 silencioso
         return JSONResponse(status_code=503, content={
             "modo": "mock" if config.USE_MOCK else "oracle",
             "erro": "falha_ao_consultar_a_base",
             "detalhe": str(e)[:400],
             "filtros": filtros,
-            "resultados": []})
+            "resultados": [], "total": 0, "tem_mais": False})
     return {"modo": "mock" if config.USE_MOCK else "oracle",
             "filtros": filtros,
-            "resultados": resultados}
+            "resultados": resultados,
+            "total": total,
+            "offset": offset,
+            "limite": limite,
+            "tem_mais": (offset + len(resultados)) < total}
 
 
 # ---------------------------------------------------------------------------
