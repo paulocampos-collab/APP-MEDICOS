@@ -109,10 +109,38 @@
     <button class="btn btn-ghost-pill" id="btnExtrato">Extrato de uso</button>
   </div>
 
-  <!-- VIEW 2: ficha básica + avançada -->
+  <!-- VIEW 2: ficha do médico + ficha avançada (PJ) — MESMA PÁGINA -->
   <section id="fichaView" class="oculto">
-    <div class="card"><div id="areaFicha"></div></div>
-    <div class="card"><div id="areaAvancada"></div></div>
+    <div class="ficha-page">
+
+      <div class="card card-ficha">
+        <div class="ficha-head-row">
+          <div>
+            <h1 class="ficha-title">👨‍⚕️ Ficha do médico</h1>
+            <p class="toolbar-sub">Dados de base, CRMs, especialidades/RQE, residências e pesquisa PF (Credify · Receita Federal).</p>
+          </div>
+        </div>
+        <div id="areaFicha"></div>
+      </div>
+
+      <div class="card card-ficha" id="cardAvancada">
+        <div class="ficha-head-row">
+          <div>
+            <h1 class="ficha-title">🏢 Ficha avançada <span class="chip chip-avancada">PJ · +300 tokens</span></h1>
+            <p class="toolbar-sub">Empresas vinculadas, quadro societário, CNAEs e faturamento — na mesma página, logo abaixo.</p>
+          </div>
+          <button class="btn btn-primary-pill oculto" id="btnAvancadoTop" type="button">Desbloquear (+300)</button>
+        </div>
+        <div id="areaAvancada"></div>
+        <div class="ficha-lock" id="avancadaLock">
+          <div class="ficha-lock-emoji" aria-hidden="true">🔒</div>
+          <h3>Dados PJ bloqueados</h3>
+          <p id="avancadaLockTexto">Desbloqueie as empresas vinculadas, o quadro societário, CNAEs e o faturamento do médico por <b>+300 tokens</b> (R$ 15).</p>
+          <button class="btn btn-primary-pill" id="btnAvancadoLock" type="button">Desbloquear Ficha Avançada (+300)</button>
+        </div>
+      </div>
+
+    </div>
   </section>
 
   <!-- VIEW 3: extrato -->

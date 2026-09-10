@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnVoltar').addEventListener('click', () => mostrar('listaView'));
   $('btnExtrato').addEventListener('click', verExtrato);
   $('btnAvancado').addEventListener('click', perguntarAvancado);
+  $('btnAvancadoTop').addEventListener('click', perguntarAvancado);
+  $('btnAvancadoLock').addEventListener('click', perguntarAvancado);
   $('modalNao').addEventListener('click', fecharModal);
   $('fUf').addEventListener('change', aoMudarUf);
   $('fEspec').addEventListener('change', aoMudarEspecialidade);
@@ -256,7 +258,7 @@ async function perguntarAbrirFicha(id) {
   $('modalTitulo').textContent = 'Abrir ficha deste lead?';
   $('modalTexto').innerHTML = `Perfil <b>${r.perfil}</b> — será debitado
     <span class="custo">${r.custo_tokens.toLocaleString('pt-BR')} tokens</span> (${real}).<br><br>
-    Depois de abrir, a Ficha Avançada (PJ — empresas e sócios) custa <b>+300 tokens</b>.`;
+    A Ficha Avançada (PJ — empresas e sócios) fica na mesma página, logo abaixo, e custa <b>+300 tokens</b> adicionais.`;
   abrirModal(async () => {
     fecharModal();
     const fo = await fichaBasica(medicoAtual, true);
@@ -329,17 +331,31 @@ function renderFicha(r) {
     if (u === 'CANCELADO' || u === 'SUSPENSO') return 'amber';
     return '';
   };
-  let html = `<div class="bloco"><h4>Médico (base)</h4><div class="kv">
-      <dt>Nome</dt><dd>${pick(m, 'nome','NOME') || '—'}</dd>
-      <dt>Perfil</dt><dd><span class="chip">${r.perfil || '—'}</span>
-        <span class="chip teal">${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados</span></dd>
-      <dt>Faculdade</dt><dd>${pick(m, 'instituicao_graduacao','INSTITUICAO_GRADUACAO') || '—'}
-          (${pick(m, 'ano_conclusao','ANO_CONCLUSAO') || '—'})</dd>
-      ${r.cpf_base_mascarado
-        ? `<dt>CPF</dt><dd>${r.cpf_base_mascarado}${r.cpf_enviado_credify && r.cpf_base_mascarado.replace(/\D/g,'') !== r.cpf_enviado_credify
-            ? ` <span class="chip amber">enviado p/ Credify: ${r.cpf_enviado_credify}</span>` : ''}</dd>`
-        : '<dt>CPF</dt><dd class="meta">não resolvido na base</dd>'}
-    </div></div>`;
+  const nomeMed = pick(m, 'nome','NOME') || '—';
+  const iniciais = nomeMed.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0] || '').join('').toUpperCase() || 'MD';
+  const facul = [pick(m, 'instituicao_graduacao','INSTITUICAO_GRADUACAO'), pick(m, 'ano_conclusao','ANO_CONCLUSAO')].filter(Boolean).join(' · ') || '—';
+  const cpfMed = r.cpf_base_mascarado || 'não resolvido na base';
+  const cpfChip = r.cpf_enviado_credify && r.cpf_base_mascarado && r.cpf_base_mascarado.replace(/\D/g,'') !== r.cpf_enviado_credify
+    ? ` <span class="chip amber">enviado p/ Credify: ${r.cpf_enviado_credify}</span>` : '';
+  const realCusto = ({ GENERALISTA: 'R$ 35', ESPECIALISTA: 'R$ 100', SUB_ESPECIALISTA: 'R$ 200' }[r.perfil] || '—');
+  let html = `<div class="ficha-cab" role="group" aria-label="Resumo do médico">
+      <div class="avatar" aria-hidden="true">${iniciais}</div>
+      <div class="ficha-nome">
+        <h1>${nomeMed}</h1>
+        <div class="sub">${facul}</div>
+        <div class="ficha-chips">
+          <span class="perfil-badge">${r.perfil || '—'}</span>
+          <span class="chip teal">${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados</span>
+          <span class="fonte-badge">CPF ${cpfMed}</span>${cpfChip}
+        </div>
+      </div>
+      <div class="ficha-custo">
+        <div class="valor">${realCusto}</div>
+        <div class="rot">Custo ficha</div>
+        <small>${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados</small>
+      </div>
+    </div>
+    <div class="ficha-secao"><span class="num">1</span><div><h3>Formação &amp; registro profissional</h3><p>Graduação, CRMs, especialidades, RQE e residências.</p></div></div>`;
 
   // CRMs ESPECIALIDADES / RQE agrupados por CRM (cada RQE pertence a um CRM especifico).
   html += '<div class="bloco"><h4>CRMs, Especialidades e RQE</h4>';
@@ -382,6 +398,7 @@ function renderFicha(r) {
     html += '</div>';
   }
 
+  html += '<div class="ficha-secao"><span class="num">2</span><div><h3>Pesquisa PF (Credify)</h3><p>Dados cadastrais e de contato da pessoa física — fonte Receita Federal.</p></div></div>';
   html += '<div class="pf-bloco"><h4>Pesquisa PF (Credify) <span class="fonte-badge">Fonte: Receita Federal</span></h4>';
   if (r.pf && r.pf.dados_cadastrais) {
     // Credify retorna emails/telefones/enderecos como OBJETO {REGISTRO_1: {...}, REGISTRO_2: {...}}
@@ -446,9 +463,20 @@ function renderFicha(r) {
   }
 
   $('areaFicha').innerHTML = html;
-  $('areaAvancada').innerHTML = '';
+  // Ficha avançada na MESMA PÁGINA: a cada novo médico o painel PJ volta ao
+  // estado bloqueado (lock) até o usuário desbloquear (+300 tokens).
   const temPF = !!(r.pf && r.pf.dados_cadastrais);
+  $('areaAvancada').innerHTML = '';
+  const lock = $('avancadaLock');
+  if (lock) lock.hidden = false;
+  const lockTxt = $('avancadaLockTexto');
+  if (lockTxt) lockTxt.innerHTML = temPF
+    ? 'Desbloqueie as empresas vinculadas, o quadro societário, CNAEs e o faturamento do médico por <b>+300 tokens</b> (R$ 15).'
+    : 'Médico sem CPF na base — não é possível consultar vínculos empresariais (Credify PJ).';
+  const lockBtn = $('btnAvancadoLock');
+  if (lockBtn) lockBtn.hidden = !temPF;
   $('btnAvancado').classList.toggle('oculto', !temPF);
+  $('btnAvancadoTop').classList.toggle('oculto', !temPF);
 }
 
 // ---------------- FICHA AVANÇADA (+300) ----------------
@@ -482,6 +510,9 @@ function renderAvancado(r) {
     }
     box.innerHTML = `<p class="aviso">${r.aviso}${extra}</p>`;
     $('btnAvancado').classList.add('oculto');
+    $('btnAvancadoTop').classList.add('oculto');
+    const lock = $('avancadaLock'); if (lock) lock.hidden = true;
+    const lockBtn = $('btnAvancadoLock'); if (lockBtn) lockBtn.classList.add('oculto');
     return;
   }
   // Mesmos helpers defensivos do renderFicha — Credify PJ em PROD devolve
@@ -554,6 +585,9 @@ function renderAvancado(r) {
   }
   box.innerHTML = html;
   $('btnAvancado').classList.add('oculto');
+  $('btnAvancadoTop').classList.add('oculto');
+  const lock = $('avancadaLock'); if (lock) lock.hidden = true;
+  const lockBtn = $('btnAvancadoLock'); if (lockBtn) lockBtn.classList.add('oculto');
   carregarSaldo().then(renderSaldo);
 }
 
