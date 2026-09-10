@@ -17,6 +17,31 @@ from app.services.tokens import debitar, estornar, extrato
 
 FRONT_DIR = Path(__file__).resolve().parent.parent / "front"
 
+
+# ----- Helpers de shape (Credify PROD vs MOCK) ---------------------------
+# Bug recorrente: a Credify em produção retorna PARTICIPACAOSOCIETARIA,
+# QUADROSOCIETARIO, TELEFONES, ENDERECOS, EMAIL etc. como OBJETO indexado por
+# REGISTRO_n (verificado no payload real do CPF 04689689628). O MOCK retorna
+# LISTA de objetos. Sem normalização, o fan-out para consultar_pj falhava
+# silenciosamente e o usuário via 'Médico sem vínculos empresariais — nada a
+# cobrar' mesmo tendo 4 vinculos reais (fix em commit 'fix(pj): CNPJs do
+# quadro societario nao rodavam').
+def toRegistros(x):
+    """Aceita lista, dict{REGISTRO_n: {...}}, ou vazio. Devolve lista."""
+    if x is None:
+        return []
+    if isinstance(x, list):
+        return x
+    if isinstance(x, dict):
+        return list(x.values())
+    return []
+
+
+def normCnpj(v):
+    """CNPJ como 14 digitos, preservando zeros a esquerda."""
+    s = "".join(ch for ch in str(v or "") if ch.isdigit())
+    return s.zfill(14) if s else ""
+
 app = FastAPI(title="cnesfy", version="0.1.0",
               description="Leads de médicos com créditos (mock)")
 
@@ -176,13 +201,20 @@ def ficha_avancada(id_medico: int, confirmar: bool = Query(False)):
 
     pf = repositorio.consultar_pf(m["cpf"]) if m.get("cpf") else None
     vinculos = []
-    if pf and (pf.get("RESPOSTA", {}).get("CODIGO") or [2])[4] == 1:
-        vinculos = pf["RESPOSTA"].get("PARTICIPACAOSOCIETARIA", [])
+    if pf:
+        codigo = (pf.get("RESPOSTA", {}) or {}).get("CODIGO", []) or []
+        # CODIGO[4]: 1 = tem vinculos societarios. Credify PROD retorna strings
+        # ("1"/"2"/"3"); o MOCK retorna inteiros (1/2/3). Comparar SEMPRE como
+        # string p/ casar os dois. Antes: '== 1' falhava em PROD.
+        if len(codigo) > 4 and str(codigo[4]).strip() == "1":
+            ps = pf.get("RESPOSTA", {}).get("PARTICIPACAOSOCIETARIA") or []
+            # Obstetrizado: PROD = {REGISTRO_n: {...}}, MOCK = [{...}, ...]
+            vinculos = toRegistros(ps)
 
     if not vinculos:
         return {"id_medico": m["id_medico"], "tokens_cobrados": 0,
                 "aviso": "Médico sem vínculos empresariais — nada a cobrar",
-                "empresas": []}
+                "empresas": [], "cnpjs_totais": 0, "cnpjs_unicos": 0}
 
     custo = CUSTO_AVANCADO
     if confirmar:
@@ -192,13 +224,42 @@ def ficha_avancada(id_medico: int, confirmar: bool = Query(False)):
             return JSONResponse(status_code=402, content={"erro": r["erro"], **r})
 
     empresas = []
+    seen_root = set()          # dedup por RAIZ (8 primeiros digitos) — 3 filiais
+    pj_cache = {}              # raiz -> resposta da Credify PJ (consultada 1x por raiz)
+    pj_consultadas = 0
     for v in vinculos:
-        cnpj = v.get("CNPJ")
-        pj = repositorio.consultar_pj(cnpj)
-        empresas.append({"vinculo": v, "cnpj": cnpj,
-                         "pj": pj.get("RESPOSTA", {}) if pj else None})
+        if not isinstance(v, dict):
+            continue
+        cnpj_full = normCnpj(v.get("CNPJ"))
+        if not cnpj_full:
+            # CNPJ veio vazio/malformado (ex: credify mock antigo, old data).
+            # Mantemos o vinculo visivel mas sem PJ — o front mostra 'consulta
+            # indisponivel' em vez de esconder o vinculo.
+            empresas.append({"vinculo": v, "cnpj": None,
+                             "pj": None, "raiz_cnpj": None,
+                             "pj_status": "cnpj_invalido"})
+            continue
+        raiz = cnpj_full[:8]
+        if raiz in seen_root:
+            # Filial/mesma empresa: reusa a resposta da matriz (ja consultada).
+            empresas.append({"vinculo": v, "cnpj": cnpj_full,
+                             "pj": pj_cache.get(raiz),
+                             "raiz_cnpj": raiz, "pj_status": "reused"})
+            continue
+        seen_root.add(raiz)
+        pj = repositorio.consultar_pj(cnpj_full)
+        pj_resp = (pj or {}).get("RESPOSTA", {}) if pj else None
+        pj_cache[raiz] = pj_resp
+        pj_consultadas += 1
+        empresas.append({"vinculo": v, "cnpj": cnpj_full,
+                         "pj": pj_resp, "raiz_cnpj": raiz,
+                         "pj_status": "consulted"})
     return {"id_medico": m["id_medico"], "tokens_cobrados": custo if confirmar else 0,
-            "custo_tokens": custo, "empresas": empresas}
+            "custo_tokens": custo, "empresas": empresas,
+            "cnpjs_totais": len(vinculos),
+            "cnpjs_unicos": len(empresas),
+            "pj_consultadas": pj_consultadas,
+            "raizes_unicas": sorted(seen_root)}
 
 
 # ---------------------------------------------------------------------------

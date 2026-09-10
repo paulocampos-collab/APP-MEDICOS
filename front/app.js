@@ -350,27 +350,66 @@ async function perguntarAvancado() {
 function renderAvancado(r) {
   const box = $('areaAvancada');
   if (r.aviso) {
-    box.innerHTML = `<p class="aviso">${r.aviso}</p>`;
+    let extra = '';
+    if (r.cnpjs_totais !== undefined) {
+      extra = ` <span class="meta">(cnpjs extraídos: ${r.cnpjs_unicos}/${r.cnpjs_totais})</span>`;
+    }
+    box.innerHTML = `<p class="aviso">${r.aviso}${extra}</p>`;
     $('btnAvancado').classList.add('oculto');
     return;
   }
-  let html = `<p class="meta">${r.tokens_cobrados.toLocaleString('pt-BR')} tokens debitados por esta abertura</p>`;
-  for (const emp of r.empresas || []) {
-    const pj = emp.pj || {};
-    const dc = pj.DADOSCADASTRAIS || {};
-    const info = pj.INFOEMPRESA || {};
-    html += `<div class="bloco"><h4>${dc.RAZAO_SOCIAL || emp.cnpj}</h4><div class="kv">
-        <dt>CNPJ</dt><dd>${emp.cnpj || '—'}</dd>
-        <dt>Porte</dt><dd>${dc.PORTE || '—'} · ${dc.SITUACAO || '—'}</dd>
-        <dt>Abertura</dt><dd>${dc.ABERTURA || '—'}</dd>
-        <dt>CNAE</dt><dd>${(pj.CNAE || []).map((x) => `${x.CODIGO} — ${x.DESCRICAO}`).join('; ') || '—'}</dd>
-        <dt>Faturamento</dt><dd>${info.FATURAMENTO_PRESUMIDO || '—'}</dd>
-        <dt>Capital</dt><dd>${info.CAPITAL_SOCIAL || '—'}</dd>
-        <dt>Endereço</dt><dd>${(pj.ENDERECOS || []).map((x) => x.LOGRADOURO).join('; ') || '—'}</dd>
-      </div><h4 style="margin-top:10px">Quadro societário</h4><table>
-        <tr><th>Nome</th><th>CPF/CNPJ</th><th>Qualificação</th><th>%</th></tr>
-        ${(pj.QUADROSOCIETARIO || []).map((s) => `<tr><td>${s.NOME}</td><td>${s.CPF_CNPJ}</td><td>${s.QUALIFICACAO}</td><td>${s.PERCENTUAL || '—'}</td></tr>`).join('')}
-      </table></div>`;
+  // Mesmos helpers defensivos do renderFicha — Credify PJ em PROD devolve
+  // objetos indexados por REGISTRO_n (nao lista) em QUADROSOCIETARIO, CNAE,
+  // ENDERECOS, etc.
+  const toList = (x) => {
+    if (Array.isArray(x)) return x;
+    if (x && typeof x === 'object') return Object.values(x);
+    return [];
+  };
+  const normObj = (o) => {
+    if (!o || typeof o !== 'object') return {};
+    const out = {};
+    for (const k of Object.keys(o)) out[String(k).toLowerCase()] = o[k];
+    return out;
+  };
+  let header = `<p class="meta">${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados por esta abertura`;
+  if (r.cnpjs_totais !== undefined) header += ` <span class="meta">— ${r.cnpjs_unicos}/${r.cnpjs_totais} CNPJs do quadro societário</span>`;
+  header += `</p>`;
+  let html = header;
+  if (!r.empresas || !r.empresas.length) {
+    html += '<p class="meta">Nenhuma empresa retornada pela Credify PJ.</p>';
+  } else {
+    for (const emp of r.empresas) {
+      const pj = emp.pj || {};
+      const dc = normObj(pj.DADOSCADASTRAIS || {});
+      const info = normObj(pj.INFOEMPRESA || {});
+      const cnaes = toList(pj.CNAE).map(normObj);
+      const ends = toList(pj.ENDERECOS).map(normObj).map((x) => {
+        const tp = x.tp_logradouro || '';
+        const lg = x.logradouro || '';
+        const nu = x.numero ? ', ' + x.numero : '';
+        const cm = x.complemento ? ' (' + x.complemento + ')' : '';
+        const br = x.bairro ? ' - ' + x.bairro : '';
+        const cd = [x.cidade, x.uf, x.cep].filter(Boolean).join('/');
+        return `${tp} ${lg}${nu}${cm}${br} (${cd})`.trim();
+      }).filter(Boolean);
+      const socios = toList(pj.QUADROSOCIETARIO).map(normObj);
+      const vin = normObj(emp.vinculo || {});
+      const cnpjFmt = (emp.cnpj || '—').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') || emp.cnpj;
+      html += `<div class="bloco"><h4>${dc.razao_social || dc.nomerazao || emp.cnpj}</h4><div class="kv">
+          <dt>CNPJ</dt><dd>${cnpjFmt}</dd>
+          <dt>Sócia nesta PJ</dt><dd>${vin.razaosocial || '—'} · <b>${vin.percentual || '—'}%</b> · ${vin.qualificacao || '—'}${vin.data ? ' (desde ' + vin.data + ')' : ''}</dd>
+          <dt>Porte</dt><dd>${dc.porte || '—'} · ${dc.situacao || '—'}</dd>
+          <dt>Abertura</dt><dd>${dc.abertura || '—'}</dd>
+          <dt>CNAE</dt><dd>${cnaes.map((x) => `${x.codigo || x.CODIGO || ''} — ${x.descricao || x.DESCRICAO || ''}`).filter((s) => s && s !== ' — ').join('; ') || '—'}</dd>
+          <dt>Faturamento</dt><dd>${info.faturamento_presumido || '—'}</dd>
+          <dt>Capital</dt><dd>${info.capital_social || '—'}</dd>
+          <dt>Endereço</dt><dd style="font-size:12px">${ends.join(' | ') || '—'}</dd>
+        </div><h4 style="margin-top:10px">Quadro societário (consultado nesta PJ)</h4>
+        <table><tr><th>Nome</th><th>CPF/CNPJ</th><th>Qualificação</th><th>%</th></tr>
+        ${socios.length ? socios.map((s) => `<tr><td>${s.nome || s.NOME || '—'}</td><td>${s.cpf_cnpj || s.CPF_CNPJ || '—'}</td><td>${s.qualificacao || s.QUALIFICACAO || '—'}</td><td>${s.percentual || s.PERCENTUAL || '—'}</td></tr>`).join('') : '<tr><td colspan="4" class="meta">Quadro não retornado pela Credify PJ.</td></tr>'}
+        </table></div>`;
+    }
   }
   box.innerHTML = html;
   $('btnAvancado').classList.add('oculto');
