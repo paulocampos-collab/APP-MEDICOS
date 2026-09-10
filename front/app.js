@@ -105,23 +105,59 @@ function renderLeads(leads, data) {
   const box = $('listaLeads');
   if (data && data.erro) { mostraErro(`${data.erro} — ${data.detalhe || ''}`); return; }
   if (!leads.length) {
-    box.innerHTML = '<p class="aviso">Nenhum médico encontrado com esses filtros.</p>';
+    box.innerHTML = '<tr><td colspan="7"><div class="vazio"><div class="vazio-emoji" aria-hidden="true">🔍</div><h3>Nenhum lead encontrado</h3><p>Tente refinar os filtros acima ou limpar para ver todos os médicos da base.</p></div></td></tr></tbody></table>';
+    box.style.display = 'block';
     return;
   }
-  box.innerHTML = '';
-  for (const l of leads) {
-    const el = document.createElement('div');
-    el.className = 'lead';
-    const chips = (l.especialidades || []).map((e) => `<span class="chip teal">${e}</span>`).join('');
-    el.innerHTML = `
-      <span class="tag-enr">${l.tem_enriquecimento ? 'PF/PJ' : 'só base'}</span>
-      <h3>${l.nome_anonimizado}</h3>
-      <div>${chips}</div>
-      <div class="meta">${l.cidade || '—'} / ${l.uf || '—'} · ${l.bairro || ''}<br>
-        CRM: <b>${l.situacao_crm || '—'}</b> · ${l.faixa_etaria || '—'} · ${l.sexo || '—'}</div>`;
-    el.addEventListener('click', () => perguntarAbrirFicha(l.id_medico));
-    box.appendChild(el);
-  }
+  const theadHtml = `<table class="lead-table" aria-label="Leads encontrados">
+    <thead><tr>
+      <th>Médico</th>
+      <th>CRM/UF</th>
+      <th>Status</th>
+      <th>Especialidade</th>
+      <th>Residência</th>
+      <th>Cidade</th>
+      <th class="th-acao">Ação</th>
+    </tr></thead>
+    <tbody>`;
+  const rowsHtml = leads.map((l) => {
+    const status = String(l.situacao_crm || '').toUpperCase();
+    const statusChip = status && status !== '—' ? `<span class="status-chip status-${status === 'CANCELADO' ? 'cancelado' : (status === 'SUSPENSO' ? 'suspenso' : 'ativo')}">${status}</span>` : '—';
+    const crm = (l.crm_formatado ? `${l.crm_formatado}` : (l.crm ? `${l.crm}/${l.uf || ''}` : '—'));
+    const esp = (l.especialidades && l.especialidades.length)
+      ? `${(l.especialidades[0] || '')}${l.rqe ? ' · RQE ' + l.rqe : ''}${l.subespecialidades && l.subespecialidades.length ? '<div class="lead-sub">' + l.subespecialidades.map((s) => 'Sub: ' + s).join(' · ') + '</div>' : ''}`
+      : (l.subespecialidades && l.subespecialidades.length ? '<div class="lead-sub">Sub: ' + l.subespecialidades.join(' · ') + '</div>' : '—');
+    const enrichTag = l.tem_enriquecimento ? '<span class="tag-enr">PF/PJ</span>' : '';
+    return `<tr class="linha-medico" data-id="${l.id_medico}" tabindex="0" role="button">
+      <td data-label="Médico">
+        <div class="lead-nome">${l.nome_anonimizado || '—'}${enrichTag}</div>
+        <div class="lead-meta">${l.faixa_etaria || '—'} · ${l.sexo || '—'}</div>
+      </td>
+      <td data-label="CRM/UF"><b>${crm}</b></td>
+      <td data-label="Status">${statusChip}</td>
+      <td data-label="Especialidade"><div class="lead-esp">${esp}</div></td>
+      <td data-label="Residência">${l.residencia || '—'}</td>
+      <td data-label="Cidade">${l.cidade || '—'} - ${l.uf || '—'}</td>
+      <td data-label="Ação" class="td-acao"><button class="btn btn-primary-pill btn-abrir-ficha" type="button">Abrir ficha</button></td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = theadHtml + rowsHtml + '</tbody></table>';
+  // event delegation — evita leak e dispensa cliques no botão "Abrir ficha"
+  box.onclick = (ev) => {
+    const tr = ev.target.closest('tr.linha-medico');
+    if (!tr) return;
+    const id = Number(tr.dataset.id);
+    if (id) perguntarAbrirFicha(id);
+  };
+  box.onkeydown = (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const tr = ev.target.closest && ev.target.closest('tr.linha-medico');
+    if (!tr) return;
+    ev.preventDefault();
+    const id = Number(tr.dataset.id);
+    if (id) perguntarAbrirFicha(id);
+  };
+  box.style.display = '';
 }
 
 // ---------------- FICHA BÁSICA (débito por perfil) ----------------

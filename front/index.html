@@ -7,21 +7,43 @@
 <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
-<header>
-  <h1>🩺 cnesfy</h1>
-  <div id="saldoBox"><span id="modoBadge">—</span><br>Saldo: <b id="saldoTokens">—</b> tokens<br><span id="saldoReais">R$ —</span></div>
+<header class="app-header">
+  <div class="logo">
+    <span class="logo-mark" aria-hidden="true">C</span>
+    <span class="logo-nome">cnesfy</span>
+  </div>
+  <div class="saldo-bar">
+    <div class="saldo-pill" id="saldoBox">
+      <span class="modo-badge" id="modoBadge">—</span>
+      <span class="saldo-texto">Saldo: <b id="saldoTokens">—</b> tokens <span class="saldo-dot">·</span> <span id="saldoReais">R$ —</span></span>
+    </div>
+    <button class="btn btn-outline-light" type="button">+ Adicionar</button>
+  </div>
 </header>
 <main>
-  <div class="nav">
-    <button class="btn ghost oculto" id="btnVoltar">← Voltar à lista</button>
-    <button class="btn teal oculto" id="btnAvancado">Ficha Avançada (+300)</button>
-    <button class="btn ghost" id="btnExtrato">Extrato de uso</button>
-  </div>
-
   <!-- VIEW 1: busca + lista anonimizada (grátis) -->
   <section id="listaView">
-    <div class="card">
-      <h2>🔍 Busca de médicos (grátis)</h2>
+
+    <div class="lead-stats">
+      <div class="stat"><div class="label">Médicos na base</div><div class="value">3.842</div><div class="delta">+ 47 hoje</div></div>
+      <div class="stat"><div class="label">Resultados desta busca</div><div class="value">1.286</div><div class="delta">+ 12% vs. mês anterior</div></div>
+      <div class="stat"><div class="label">Fichas abertas (mês)</div><div class="value">214</div><div class="delta">R$ 51,60 consumidos</div></div>
+      <div class="stat"><div class="label">Token médio / ficha</div><div class="value">742</div><div class="delta">Esp.: 892 · Avanç.: 1.014</div></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="toolbar-title">
+        <h1>🔍 Busca de médicos</h1>
+        <p class="toolbar-sub">Busca gratuita e anonimizada. A ficha individual cobra tokens.</p>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-ghost-pill" type="button">⤓ Exportar CSV</button>
+        <button class="btn btn-primary-pill" type="button">Nova campanha</button>
+      </div>
+    </div>
+
+    <div class="card card-filtros">
+      <div class="card-head"><h2>🔍 Busca de médicos (grátis)</h2></div>
       <div class="grade-filtros">
         <div class="campo"><label>UF</label>
           <select id="fUf">
@@ -45,7 +67,7 @@
           </select></div>
         <div class="campo"><label>Situação do CRM</label>
           <select id="fSit">
-            <option value="">Todas</option><option>ATIVO</option><option>SUSPENSO</option>
+            <option value="">Todas</option><option>ATIVO</option><option>SUSPENSO</option><option>CANCELADO</option>
           </select></div>
         <div class="campo"><label>Sexo</label>
           <select id="fSexo">
@@ -57,19 +79,36 @@
             <option>ATE_29</option><option>30_39</option><option>40_49</option>
             <option>50_59</option><option>60_MAIS</option>
           </select></div>
-        <div class="campo" style="display:flex;align-items:flex-end">
-          <button class="btn" id="btnBuscar" style="width:100%">Buscar</button>
-        </div>
       </div>
       <label class="check"><input type="checkbox" id="fEnr"> apenas leads com PF/PJ disponível</label>
+      <div class="filtros-foot">
+        <div class="filtros-info"><b id="resultCount">1.286</b> resultados · 200 cobrados para CRM/RQE enriquecido</div>
+        <div class="filtros-acoes">
+          <button class="btn btn-ghost-pill" type="button">Limpar filtros</button>
+          <button class="btn btn-primary-pill" id="btnBuscar" type="button">Buscar leads</button>
+          <button class="btn btn-ghost-pill oculto" id="btnMais" type="button" style="min-width:160px">Carregar mais</button>
+        </div>
+      </div>
     </div>
-    <div class="card">
-      <h2>📋 Leads encontrados (anonimizado · nome mascarado)</h2>
-      <div id="listaLeads"></div>
-      <p class="meta" id="infoLista"></p>
-      <button class="btn ghost oculto" id="btnMais" style="margin-top:14px">Carregar mais</button>
+
+    <div class="card card-tabela">
+      <div class="card-head"><h2>📋 Leads encontrados (anonimizado · nome mascarado)</h2></div>
+      <div class="tabela-wrap">
+        <div id="listaLeads"></div>
+      </div>
+      <div class="paginacao">
+        <p class="meta" id="infoLista"></p>
+      </div>
     </div>
+
   </section>
+
+  <!-- nav comum usada em fichaView / extratoView (não usada na lista) -->
+  <div class="nav oculto" id="topNav">
+    <button class="btn btn-ghost-pill oculto" id="btnVoltar">← Voltar à lista</button>
+    <button class="btn btn-warning-pill oculto" id="btnAvancado">Ficha Avançada (+300)</button>
+    <button class="btn btn-ghost-pill" id="btnExtrato">Extrato de uso</button>
+  </div>
 
   <!-- VIEW 2: ficha básica + avançada -->
   <section id="fichaView" class="oculto">
@@ -89,8 +128,8 @@
     <h3 id="modalTitulo"></h3>
     <p id="modalTexto"></p>
     <div class="acoes">
-      <button class="btn ghost" id="modalNao">Cancelar</button>
-      <button class="btn" id="modalSim">Confirmar</button>
+      <button class="btn btn-ghost-pill" id="modalNao">Cancelar</button>
+      <button class="btn btn-primary-pill" id="modalSim">Confirmar</button>
     </div>
   </div>
 </div>
