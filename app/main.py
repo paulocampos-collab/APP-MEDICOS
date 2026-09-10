@@ -120,6 +120,20 @@ def ficha_basica(id_medico: int, confirmar: bool = Query(False)):
         s = str(v or "")
         return (s[:3] + "." + s[3:6] + "." + s[6:9] + "-" + s[9:11]) if len(s) >= 11 else (s or None)
 
+    def _cpf_enviado_credify(v):
+        """CPF como enviado a Credify: somente digitos, zeros a esquerda
+        preservados (mesma regra do CredifyClient._normalize_cpf_cnpj).
+        Defensivo: se o normalizador real falhar, usa fallback local
+        identico — nunca deixa o endpoint estourar 500."""
+        if not v:
+            return None
+        try:
+            from app.credify.client import CredifyClient
+            return str(CredifyClient._normalize_cpf_cnpj(v))
+        except Exception:
+            s = "".join(ch for ch in str(v) if ch.isdigit())
+            return s.zfill(11) if s and len(s) <= 11 else (s.zfill(14) if s else s)
+
     resp_pf = None
     if pf_encontrada:
         r = pf["RESPOSTA"]
@@ -141,7 +155,9 @@ def ficha_basica(id_medico: int, confirmar: bool = Query(False)):
         # CPF volta em dois formatos p/ debug do front (sem expor ao cliente
         # o valor real alem do que ja tem na base mascarado):
         "cpf_base_mascarado": mascara_cpf(m.get("cpf")),
-        "cpf_enviado_credify": (str(repositorio._normalize_cpf_cnpj(m.get("cpf"))) if m.get("cpf") else None),
+        # Debug: CPF enviado a Credify (somente digitos). Helper defensivo —
+        # nunca gera 500 mesmo se o normalizador do client falhar.
+        "cpf_enviado_credify": _cpf_enviado_credify(m.get("cpf")),
         "pf_codigo_pos0": codigo0,
         "dados_medico": {k: v for k, v in m.items() if k not in ("cpf",)},
         "pf": resp_pf,
