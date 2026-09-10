@@ -146,7 +146,7 @@ SQL_MEDICO = """
 SELECT ID_MEDICO          AS "id_medico",
        NOME               AS "nome",
        NOME_SOCIAL        AS "nome_social",
-       CPF                AS "cpf",
+       LTRIM(RTRIM(TO_CHAR(CPF)))  AS "cpf",
        ANO_CONCLUSAO      AS "ano_conclusao",
        INSTITUICAO_GRADUACAO AS "instituicao_graduacao"
 FROM   credpf.credi01300_new

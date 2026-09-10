@@ -61,10 +61,40 @@ class CredifyClient:
             return r.json()
 
     # ---------------- PF / PJ ----------------
+    @staticmethod
+    def _normalize_cpf_cnpj(v):
+        """Aceita '123.456.789-01', '12345678901', '12345' etc. Devolve
+        SOMENTE os digitos. Zeros a esquerda sao preservados via zfill(11|14)."""
+        s = "".join(ch for ch in str(v or "") if ch.isdigit())
+        if not s:
+            return s
+        return s.zfill(11) if len(s) <= 11 else s.zfill(14)
+
     def consultar_pf(self, cpf):
-        payload = {"Consulta": {"IdConsulta": "328", "CpfCnpj": cpf, "TipoPessoa": "F"}}
-        return self._post(config.CREDIFY_PF_PATH, payload)
+        digits = self._normalize_cpf_cnpj(cpf)
+        payload = {"Consulta": {"IdConsulta": "328", "CpfCnpj": digits, "TipoPessoa": "F"}}
+        try:
+            resp = self._post(config.CREDIFY_PF_PATH, payload)
+        except Exception as e:
+            # Devolve um payload 'PF nao encontrada' em vez de 500, para o endpoint
+            # de ficha nao quebrar a UX inteira. O LOG fica para inspecao.
+            import logging
+            logging.warning("Credify PF falhou p/ CPF %s: %s", digits[:6] + "...", e)
+            return {"CONSULTA": {"IdConsulta": "328", "TipoPessoa": "F", "CpfCnpj": digits},
+                    "RESPOSTA": {"CODIGO": [3] * 11,
+                                 "DADOSCADASTRAIS": None, "ENDERECOS": [],
+                                 "TELEFONES": [], "EMAIL": [],
+                                 "PARTICIPACAOSOCIETARIA": []},
+                    "ERRO": str(e)[:240]}
+        return resp
 
     def consultar_pj(self, cnpj):
-        payload = {"Consulta": {"IdConsulta": "329", "CpfCnpj": cnpj, "TipoPessoa": "J"}}
-        return self._post(config.CREDIFY_PJ_PATH, payload)
+        digits = self._normalize_cpf_cnpj(cnpj)
+        payload = {"Consulta": {"IdConsulta": "329", "CpfCnpj": digits, "TipoPessoa": "J"}}
+        try:
+            return self._post(config.CREDIFY_PJ_PATH, payload)
+        except Exception as e:
+            import logging
+            logging.warning("Credify PJ falhou p/ CNPJ %s: %s", digits[:6] + "...", e)
+            return {"CONSULTA": {"IdConsulta": "329", "TipoPessoa": "J", "CpfCnpj": digits},
+                    "RESPOSTA": {"CODIGO": [3] * 10}, "ERRO": str(e)[:240]}

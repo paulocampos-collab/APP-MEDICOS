@@ -97,36 +97,56 @@ def ficha_basica(id_medico: int, confirmar: bool = Query(False)):
     perfil_info = classificar(m["especialidades"])
     custo = perfil_info["custo_tokens"]
     pf = repositorio.consultar_pf(m["cpf"]) if m.get("cpf") else None
-    codigo = (pf or {}).get("RESPOSTA", {}).get("CODIGO", [2])
-    pf_encontrada = bool(m.get("cpf")) and codigo[0] == 1
+    codigo = (pf or {}).get("RESPOSTA", {}).get("CODIGO", [])
+    # CREDIFY real retorna CODIGO[x] como STRING ("1"/"2"/"3"); o MOCK
+    # retorna INTEIRO (1/2/3). Comparei SEMPRE como string p/ casar os dois.
+    codigo0 = str(codigo[0]).strip() if codigo else ""
+    pf_encontrada = bool(m.get("cpf")) and codigo0 in ("1", "2")  # 2 = não encontrado sem penalidade
 
-    if pf_encontrada and confirmar:
+    # REGRA DE DÉBITO: o usuario CLICOU em 'abrir ficha' (confirmar=true),
+    # portanto o preco do nivel (GENERALISTA/ESPECIALISTA/SUB) SEMPRE e cobrado,
+    # independente da disponibilidade de dados PF. Antes: so debitava quando o
+    # codigo[0] da Credify era 1 -> '0 tokens debitados' sempre que PF falhava.
+    cobrado = 0
+    if confirmar:
         ok, r = debitar("CONSUMO",
-                        f"Ficha básica {perfil_info['perfil']} — #{id_medico}",
+                        f"Ficha basica {perfil_info['perfil']} #{id_medico}",
                         custo, f"medico:{id_medico}")
         if not ok:
             return JSONResponse(status_code=402, content={"erro": r["erro"], **r})
+        cobrado = custo
+
+    def mascara_cpf(v):
+        s = str(v or "")
+        return (s[:3] + "." + s[3:6] + "." + s[6:9] + "-" + s[9:11]) if len(s) >= 11 else (s or None)
 
     resp_pf = None
     if pf_encontrada:
         r = pf["RESPOSTA"]
         resp_pf = {"dados_cadastrais": r.get("DADOSCADASTRAIS"),
-                   "enderecos": r.get("ENDERECOS", []),
-                   "telefones": r.get("TELEFONES", []),
-                   "emails": r.get("EMAIL", []),
-                   "participacao_societaria": None}  # nunca exibida na básica
+                   "enderecos":    r.get("ENDERECOS", []),
+                   "telefones":    r.get("TELEFONES", []),
+                   "emails":       r.get("EMAIL", []),
+                   "participacao_societaria": None}  # nunca exibida na basica
     elif m.get("cpf"):
         resp_pf = {"dados_cadastrais": None, "enderecos": [], "telefones": [],
                    "emails": [], "participacao_societaria": None,
-                   "aviso": "PF não encontrada — entrega apenas o básico, sem débito do enriquecimento"}
+                   "aviso": ("PF nao encontrada na Credify (CODIGO[0]=%s). "
+                             "Ficha basica entregue, sem dados de contato." % (codigo0 or "-"))}
 
-    cobrado = custo if pf_encontrada and confirmar else 0
-    return {"id_medico": m["id_medico"], "perfil": perfil_info["perfil"],
-            "custo_tokens": custo, "tokens_cobrados": cobrado,
-            "pf_encontrada": pf_encontrada,
-            "dados_medico": {k: v for k, v in m.items() if k not in ("cpf",)},
-            "pf": resp_pf,
-            "prox": "/api/v1/medicos/{id}/ficha-avancada (+300)"}
+    return {
+        "id_medico": m["id_medico"], "perfil": perfil_info["perfil"],
+        "custo_tokens": custo, "tokens_cobrados": cobrado,
+        "pf_encontrada": pf_encontrada,
+        # CPF volta em dois formatos p/ debug do front (sem expor ao cliente
+        # o valor real alem do que ja tem na base mascarado):
+        "cpf_base_mascarado": mascara_cpf(m.get("cpf")),
+        "cpf_enviado_credify": (str(repositorio._normalize_cpf_cnpj(m.get("cpf"))) if m.get("cpf") else None),
+        "pf_codigo_pos0": codigo0,
+        "dados_medico": {k: v for k, v in m.items() if k not in ("cpf",)},
+        "pf": resp_pf,
+        "prox": "/api/v1/medicos/{id}/ficha-avancada (+300)"
+    }
 
 
 # ---------------------------------------------------------------------------

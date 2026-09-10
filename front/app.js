@@ -151,27 +151,52 @@ function renderFicha(r) {
       <dt>Perfil</dt><dd><span class="chip">${r.perfil}</span>
         <span class="chip teal">${r.tokens_cobrados.toLocaleString('pt-BR')} tokens debitados</span></dd>
       <dt>Faculdade</dt><dd>${m.instituicao_graduacao || '—'} (${m.ano_conclusao || '—'})</dd>
+      ${r.cpf_base_mascarado
+        ? `<dt>CPF</dt><dd>${r.cpf_base_mascarado}${r.cpf_enviado_credify && r.cpf_base_mascarado.replace(/\D/g,'') !== r.cpf_enviado_credify
+            ? ` <span class="chip amber">enviado p/ Credify: ${r.cpf_enviado_credify}</span>` : ''}</dd>`
+        : '<dt>CPF</dt><dd class="meta">não resolvido na base</dd>'}
     </div></div>`;
 
-  html += '<div class="bloco"><h4>CRMs por UF</h4><table><tr><th>CRM</th><th>UF</th><th>Situação</th></tr>';
-  for (const c of m.crms || []) html += `<tr><td>${c.crm}</td><td>${c.uf}</td><td>${c.situacao}</td></tr>`;
-  html += '</table></div>';
-
-  html += '<div class="bloco"><h4>Especialidades / RQE</h4>';
-  const espSet = new Set();
-  for (const lista of Object.values(m.especialidades || {})) for (const e of lista) {
-    const key = `${e.especialidade}|${e.rqe || ''}|${e.flag_sub ? 1 : 0}`;
-    if (espSet.has(key)) continue;
-    espSet.add(key);
-    html += `<span class="chip">${e.especialidade}</span>`;
-    if (e.rqe) html += `<span class="chip teal">RQE ${e.rqe}</span>`;
-    if (e.flag_sub || e.id_esp_sub) html += `<span class="chip amber">sub</span>`;
+  // CRMs ESPECIALIDADES / RQE agrupados por CRM (cada RQE pertence a um CRM especifico).
+  // Mostra 1 bloco por CRM com suas especialidades/RQE abaixo.
+  const crms = m.crms || [];
+  const espPorCrm = m.especialidades || {};
+  const situacaoChip = (s) => {
+    const u = String(s || '').toUpperCase();
+    if (u === 'ATIVO') return 'teal';
+    if (u === 'CANCELADO' || u === 'SUSPENSO') return 'amber';
+    return '';
+  };
+  html += '<div class="bloco"><h4>CRMs, Especialidades e RQE</h4>';
+  if (!crms.length) {
+    html += '<p class="meta">Sem CRM registrado.</p>';
+  } else {
+    for (const c of crms) {
+      const lista = espPorCrm && (espPorCrm[c.id_crm] || espPorCrm[String(c.id_crm)] || []);
+      html += `<div class="crm-grupo">
+        <div class="crm-cabecalho">
+          <span class="chip">${c.crm}</span>
+          <span class="chip">${c.uf}</span>
+          <span class="chip ${situacaoChip(c.situacao)}">${c.situacao || '—'}</span>
+        </div>
+        <div class="crm-especialidades">`;
+      if (!lista.length) {
+        html += '<p class="meta">Sem especialidade registrada neste CRM.</p>';
+      } else {
+        for (const e of lista) {
+          html += `<span class="chip">${e.especialidade}</span>`;
+          if (e.rqe) html += `<span class="chip teal">RQE ${e.rqe}</span>`;
+          if (e.flag_sub || e.id_esp_sub) html += `<span class="chip amber">sub</span>`;
+        }
+      }
+      html += '</div></div>';
+    }
   }
   html += '</div>';
 
   if (m.residencias && m.residencias.length) {
     html += '<div class="bloco"><h4>Residências</h4>';
-    for (const x of m.residencias) html += `<span class="chip teal">${x.programa} · ${x.instituicao}</span> `;
+    for (const x of m.residencias) html += `<span class="chip teal">${x.programa}${x.instituicao ? ' · ' + x.instituicao : ''}</span> `;
     html += '</div>';
   }
 
@@ -183,12 +208,12 @@ function renderFicha(r) {
       <dt>E-mail</dt><dd>${(r.pf.emails || []).map((x) => x.ENDERECO).join(', ') || '—'}</dd>
       <dt>Telefones</dt><dd>${(r.pf.telefones || []).map((x) => `(${x.DDD}) ${x.NUMERO}`).join(', ') || '—'}</dd>
       <dt>Endereço PF</dt><dd>${(r.pf.enderecos || []).map((x) => x.LOGRADOURO).join('; ') || '—'}</dd>
-      <dt>Quadro societário</dt><dd><i>não exibido no nível básico</i></dd>
+      <dt>Quadro societário</dt><dd><i>não incluído no nível básico</i></dd>
     </div>`;
   } else if (r.pf && r.pf.aviso) {
     html += `<p class="aviso">${r.pf.aviso}</p>`;
   } else {
-    html += '<p class="aviso">Médico sem CPF resolvido na base — apenas dados cadastrais, sem débito de enriquecimento.</p>';
+    html += '<p class="aviso">Médico sem CPF — apenas dados cadastrais.</p>';
   }
   html += '</div>';
 
