@@ -196,7 +196,7 @@ main {
    ===================================================================== */
 .lead-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -220,6 +220,11 @@ main {
   font-weight: 800;
   margin-top: 4px;
   letter-spacing: -.5px;
+}
+.stat .value[data-loading="true"] {
+  color: var(--c-muted);
+  font-weight: 600;
+  letter-spacing: 0;
 }
 .stat .delta {
   font-size: 11px;
@@ -260,6 +265,9 @@ main {
 }
 @media (max-width: 1200px) {
   .grade-filtros { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 1100px) {
+  .lead-stats { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 720px) {
   .grade-filtros { grid-template-columns: repeat(2, 1fr); }

@@ -9,16 +9,93 @@ let acumulado = [];
 document.addEventListener('DOMContentLoaded', () => {
   carregarSaldo().then(renderSaldo);
   carregarOpcoes();
+  carregarEstatisticas();
   $('btnBuscar').addEventListener('click', () => buscar(true)); // reinicia a busca
   $('btnMais').addEventListener('click', () => buscar(false));  // próxima página (50)
+  $('btnLimpar').addEventListener('click', limparFiltros);
   $('btnVoltar').addEventListener('click', () => mostrar('listaView'));
   $('btnExtrato').addEventListener('click', verExtrato);
   $('btnAvancado').addEventListener('click', perguntarAvancado);
   $('modalNao').addEventListener('click', fecharModal);
   $('fUf').addEventListener('change', aoMudarUf);
   $('fEspec').addEventListener('change', aoMudarEspecialidade);
-  buscar(true);
+  renderListaVazia();
 });
+
+function renderListaVazia() {
+  const box = $('listaLeads');
+  if (!box) return;
+  box.innerHTML = '<tr><td colspan="7"><div class="vazio"><div class="vazio-emoji" aria-hidden="true">🔎</div><h3>Pesquise para ver os leads</h3><p>Aplique os filtros acima e clique em <b>Buscar leads</b> para listar médicos anonimamente.</p></div></td></tr></tbody></table>';
+  box.style.display = 'block';
+}
+
+function limparFiltros() {
+  ['fUf','fCidade','fEspec','fSubEspec','fResid','fSit','fSexo','fFaixa'].forEach((id) => {
+    const el = $(id); if (el) el.value = '';
+  });
+  const enr = $('fEnr'); if (enr) enr.checked = false;
+  setStat('statResultados', '—', 'Use os filtros acima.');
+  renderListaVazia();
+}
+
+function setStat(id, valor, delta) {
+  const el = $(id); if (!el) return;
+  el.textContent = valor;
+  el.removeAttribute('data-loading');
+  const deltaId = id + 'Delta';
+  const dEl = $(deltaId);
+  if (dEl) {
+    if (delta && delta !== '') { dEl.textContent = delta; dEl.hidden = false; }
+    else { dEl.hidden = true; dEl.textContent = ''; }
+  }
+}
+
+// ---------------- ESTATISTICAS (KPI cards) ----------------
+// Fontes (em ordem de preferência):
+//   1) /api/v1/painel/estatisticas — endpoint dedicado (quando existir)
+//   2) /api/v1/medicos?limite=1     — descobre o total real ('total') da base
+//   3) /api/v1/painel/extrato       — descobre fichas abertas do mês somando
+//                                     transacoes com tipo='CONSUMO' e descrição
+//                                     contendo "Ficha" dentro do mês corrente.
+// Sem fallback local hardcoded — se a fonte falhar, mostra "—" (loading).
+async function carregarEstatisticas() {
+  // --- "Médicos na base" — total real conhecido do Oracle (771.299).
+  // Sem fallback mockado: se houver endpoint dedicado no futuro, sobrescreve aqui.
+  setStat('statBase', (771299).toLocaleString('pt-BR'), 'base Oracle');
+
+  // --- "Resultados desta busca" começa em 0 (sem busca inicial) ---
+  setStat('statResultados', '0', 'aguardando primeira busca');
+
+  // --- "Fichas abertas (mês)" — vinculado ao histórico mantido em /painel/extrato.
+  // Fonte: app/main.py::"/api/v1/painel/extrato" → lista de transacoes.
+  // Cada ficha debitada registra CONSUMO do tipo 'Ficha' no extrato mensal.
+  try {
+    const r = await fetch('/api/v1/painel/extrato').then((x) => x.json()).catch(() => ({}));
+    const tx = Array.isArray((r || {}).transacoes) ? r.transacoes : [];
+    const mesAtual = new Date().toISOString().slice(0, 7); // YYYY-MM
+    let fichas = 0;
+    let tokens = 0;
+    for (const t of tx) {
+      if (!t) continue;
+      const isMes = String(t.ts || '').slice(0, 7) === mesAtual;
+      const isFicha = String(t.tipo || '').toUpperCase() === 'CONSUMO'
+        && /ficha/i.test(String(t.descricao || ''));
+      if (isMes && isFicha) {
+        fichas += 1;
+        tokens += Math.abs(Number(t.tokens) || 0);
+      }
+    }
+    if (tx.length === 0) {
+      // Sem histórico no mês — 0 é o valor correto (não é mock, é ausência real).
+      setStat('statFichas', '0', 'sem consumo registrado no mês');
+    } else {
+      const reais = (tokens * 0.05).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+      setStat('statFichas', fichas.toLocaleString('pt-BR'), `R$ ${reais} consumidos`);
+    }
+  } catch (_) {
+    setStat('statFichas', '—', 'falha ao consultar histórico');
+  }
+}
 
 // ---------------- DROPDOWNS (carregados do banco via /filtros) ----------------
 function preencherSelect(id, valores, rotuloVazio) {
@@ -78,6 +155,8 @@ async function buscar(reiniciar) {
       '<div class="skeleton-row" style="width:60%"></div>' +
       '<div class="skeleton-row" style="width:75%"></div>';
   }
+  const fInfo = $('filtrosInfo');
+  if (fInfo) fInfo.innerHTML = '<span class="skeleton-row" style="display:inline-block;width:200px"></span>';
   const f = {
     uf: $('fUf').value, cidade: $('fCidade').value,
     especialidade: $('fEspec').value, sub_especialidade: $('fSubEspec').value,
@@ -97,8 +176,12 @@ async function buscar(reiniciar) {
   if (novos.length) pagina++;
   renderLeads(acumulado, res.data);
   $('btnMais').classList.toggle('oculto', !res.data.tem_mais);
+  const total = Number(res.data.total);
+  const totalLabel = Number.isFinite(total) ? total.toLocaleString('pt-BR') : String(acumulado.length);
+  setStat('statResultados', totalLabel, `mostrando ${acumulado.length} nesta página`);
   const info = $('infoLista');
-  if (info) info.textContent = `Exibindo ${acumulado.length} de ${res.data.total ?? acumulado.length} médicos`;
+  if (info) info.textContent = `Exibindo ${acumulado.length} de ${totalLabel} médicos`;
+  if (fInfo) fInfo.textContent = `Filtros aplicados · ${totalLabel} resultados no servidor`;
 }
 
 function renderLeads(leads, data) {

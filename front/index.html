@@ -25,10 +25,9 @@
   <section id="listaView">
 
     <div class="lead-stats">
-      <div class="stat"><div class="label">Médicos na base</div><div class="value">3.842</div><div class="delta">+ 47 hoje</div></div>
-      <div class="stat"><div class="label">Resultados desta busca</div><div class="value">1.286</div><div class="delta">+ 12% vs. mês anterior</div></div>
-      <div class="stat"><div class="label">Fichas abertas (mês)</div><div class="value">214</div><div class="delta">R$ 51,60 consumidos</div></div>
-      <div class="stat"><div class="label">Token médio / ficha</div><div class="value">742</div><div class="delta">Esp.: 892 · Avanç.: 1.014</div></div>
+      <div class="stat"><div class="label">Médicos na base</div><div class="value" id="statBase" data-loading="true">—</div><div class="delta" id="statBaseDelta" hidden></div></div>
+      <div class="stat"><div class="label">Resultados desta busca</div><div class="value" id="statResultados" data-loading="true">—</div><div class="delta" id="statResultadosDelta" hidden></div></div>
+      <div class="stat"><div class="label">Fichas abertas (mês)</div><div class="value" id="statFichas" data-loading="true">—</div><div class="delta" id="statFichasDelta" hidden></div></div>
     </div>
 
     <div class="toolbar">
@@ -82,9 +81,9 @@
       </div>
       <label class="check"><input type="checkbox" id="fEnr"> apenas leads com PF/PJ disponível</label>
       <div class="filtros-foot">
-        <div class="filtros-info"><b id="resultCount">1.286</b> resultados · 200 cobrados para CRM/RQE enriquecido</div>
+        <div class="filtros-info" id="filtrosInfo"></div>
         <div class="filtros-acoes">
-          <button class="btn btn-ghost-pill" type="button">Limpar filtros</button>
+          <button class="btn btn-ghost-pill" id="btnLimpar" type="button">Limpar filtros</button>
           <button class="btn btn-primary-pill" id="btnBuscar" type="button">Buscar leads</button>
           <button class="btn btn-ghost-pill oculto" id="btnMais" type="button" style="min-width:160px">Carregar mais</button>
         </div>
