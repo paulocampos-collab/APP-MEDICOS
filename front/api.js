@@ -1,8 +1,19 @@
 const BASE = '/api/v1';
 
+/** fetch + extração segura do JSON. Nunca lança erro de parse; devolve {ok,status,data}. */
+async function get(url) {
+  try {
+    const r = await fetch(url);
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { detalhe: String(e) } };
+  }
+}
+
 export async function carregarSaldo() {
-  const r = await fetch(`${BASE}/painel/saldo`);
-  return r.json();
+  const o = await get(`${BASE}/painel/saldo`);
+  return o.data || {};
 }
 
 export async function buscarMedicos(filtros) {
@@ -10,16 +21,13 @@ export async function buscarMedicos(filtros) {
   for (const [k, v] of Object.entries(filtros)) {
     if (v !== '' && v !== null && v !== undefined && v !== false) q.set(k, v);
   }
-  const r = await fetch(`${BASE}/medicos?${q.toString()}`);
-  return r.json();
+  return get(`${BASE}/medicos?${q.toString()}`);
 }
 
 export async function fichaBasica(id, confirmar = false) {
-  const r = await fetch(`${BASE}/medicos/${id}/ficha-basica?confirmar=${confirmar}`);
-  return r.json();
+  return get(`${BASE}/medicos/${id}/ficha-basica?confirmar=${confirmar}`);
 }
 
 export async function fichaAvancada(id, confirmar = false) {
-  const r = await fetch(`${BASE}/medicos/${id}/ficha-avancada?confirmar=${confirmar}`);
-  return r.json();
+  return get(`${BASE}/medicos/${id}/ficha-avancada?confirmar=${confirmar}`);
 }

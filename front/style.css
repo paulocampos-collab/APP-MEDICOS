@@ -4,6 +4,7 @@ header { background: #0e4c7a; color: #fff; padding: 14px 20px; display: flex; ju
 header h1 { font-size: 18px; margin: 0; }
 #saldoBox { background: rgba(255,255,255,.16); border-radius: 10px; padding: 8px 14px; font-size: 13px; text-align: right; }
 #saldoBox b { font-size: 16px; }
+#modoBadge { display: inline-block; font-size: 11px; background: rgba(255,255,255,.22); border-radius: 8px; padding: 2px 8px; margin-bottom: 4px; }
 main { max-width: 1100px; margin: 18px auto; padding: 0 16px; }
 .nav { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .btn { background: #0e4c7a; color: #fff; border: 0; border-radius: 8px; padding: 9px 16px; font-size: 14px; cursor: pointer; }

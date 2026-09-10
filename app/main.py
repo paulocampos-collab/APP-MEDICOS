@@ -48,9 +48,19 @@ def lista_medicos(
                "situacao_crm": situacao_crm, "sexo": sexo,
                "faixa_etaria": faixa_etaria,
                "apenas_com_enriquecimento": apenas_com_enriquecimento}
+    ativos = {k: v for k, v in filtros.items() if v not in (None, False)}
+    try:
+        resultados = repositorio.listar_medicos(ativos)
+    except Exception as e:  # ex.: falha de conexão Oracle -> JSON amigável, não 500 silencioso
+        return JSONResponse(status_code=503, content={
+            "modo": "mock" if config.USE_MOCK else "oracle",
+            "erro": "falha_ao_consultar_a_base",
+            "detalhe": str(e)[:400],
+            "filtros": filtros,
+            "resultados": []})
     return {"modo": "mock" if config.USE_MOCK else "oracle",
             "filtros": filtros,
-            "resultados": repositorio.listar_medicos({k: v for k, v in filtros.items() if v not in (None, False)})}
+            "resultados": resultados}
 
 
 # ---------------------------------------------------------------------------

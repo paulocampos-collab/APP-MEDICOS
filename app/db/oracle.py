@@ -28,9 +28,15 @@ def _get_pool():
 
 
 def executar(sql, params=None):
-    pool = _get_pool()
-    with pool.acquire() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, params or {})
-            cols = [d[0] for d in cur.description]
-            return [dict(zip(cols, row)) for row in cur.fetchall()]
+    """Executa SQL e devolve lista de dicts. Erro de conexão vira RuntimeError legível."""
+    try:
+        pool = _get_pool()
+        with pool.acquire() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params or {})
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except RuntimeError:
+        raise
+    except Exception as e:  # DPY-xxxx, ORA-xxxx, timeout etc.
+        raise RuntimeError(f"Falha ao consultar o Oracle ({type(e).__name__}): {e}") from e

@@ -1,8 +1,13 @@
 """Configuração central — tudo vindo de variáveis de ambiente (.env)."""
+import logging
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("cnesfy")
 
 
 def _bool(v):
@@ -11,6 +16,7 @@ def _bool(v):
 
 # true = dados mocados (default) / false = Oracle + Credify reais
 USE_MOCK = _bool(os.getenv("USE_MOCK", "true"))
+logger.info("MODO DE EXECUCAO: %s", "MOCK (dados de exemplo, sem banco)" if USE_MOCK else "ORACLE + CREDIFY (producao)")
 
 # Banco Oracle — suporta DSN completo OU host/porta/servico separados
 ORACLE_DSN = os.getenv("ORACLE_DSN", "").strip()

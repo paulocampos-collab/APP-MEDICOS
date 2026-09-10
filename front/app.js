@@ -13,6 +13,17 @@ document.addEventListener('DOMContentLoaded', () => {
   buscar();
 });
 
+function mostraErro(mensagem) {
+  const box = $('listaLeads');
+  if (box) box.innerHTML = `<div class="erro"><b>Falha na consulta.</b> ${mensagem}</div>`;
+}
+
+function renderModo(data) {
+  const el = $('modoBadge');
+  if (!el) return;
+  el.textContent = data && data.modo === 'oracle' ? 'ORACLE' : 'MOCK';
+}
+
 // ---------------- LISTA ----------------
 async function buscar() {
   const f = {
@@ -22,13 +33,20 @@ async function buscar() {
     faixa_etaria: $('fFaixa').value,
     apenas_com_enriquecimento: $('fEnr').checked,
   };
-  const data = await buscarMedicos(f);
-  renderLeads(data.resultados);
+  const res = await buscarMedicos(f);
+  renderModo(res.data);
+  if (!res.ok) {
+    const det = (res.data && (res.data.detalhe || res.data.erro)) || '';
+    mostraErro(`HTTP ${res.status || '?'} ${det}`);
+    return;
+  }
+  renderLeads(Array.isArray(res.data.resultados) ? res.data.resultados : [], res.data);
 }
 
-function renderLeads(leads) {
+function renderLeads(leads, data) {
   const box = $('listaLeads');
   box.innerHTML = '';
+  if (data && data.erro) { mostraErro(`${data.erro} — ${data.detalhe || ''}`); return; }
   if (!leads.length) {
     box.innerHTML = '<p class="aviso">Nenhum médico encontrado com esses filtros.</p>';
     return;
@@ -42,7 +60,7 @@ function renderLeads(leads) {
       <h3>${l.nome_anonimizado}</h3>
       <div>${chips}</div>
       <div class="meta">${l.cidade || '—'} / ${l.uf || '—'} · ${l.bairro || ''}<br>
-        CRM: <b>${l.situacao_crm || '—'}</b> · ${l.faixa_etaria} · ${l.sexo || '—'}</div>`;
+        CRM: <b>${l.situacao_crm || '—'}</b> · ${l.faixa_etaria || '—'} · ${l.sexo || '—'}</div>`;
     el.addEventListener('click', () => perguntarAbrirFicha(l.id_medico));
     box.appendChild(el);
   }
@@ -51,7 +69,12 @@ function renderLeads(leads) {
 // ---------------- FICHA BÁSICA (débito por perfil) ----------------
 async function perguntarAbrirFicha(id) {
   medicoAtual = id;
-  const r = await fichaBasica(id); // sem confirmar: só mostra o custo
+  const o = await fichaBasica(id); // sem confirmar: só mostra o custo
+  if (!o.ok || o.data.erro) {
+    mostraErro(o.data.detalhe || o.data.erro || `HTTP ${o.status}`);
+    return;
+  }
+  const r = o.data;
   const real = { GENERALISTA: 'R$ 35', ESPECIALISTA: 'R$ 100', SUB_ESPECIALISTA: 'R$ 200' }[r.perfil];
   $('modalTitulo').textContent = 'Abrir ficha deste lead?';
   $('modalTexto').innerHTML = `Perfil <b>${r.perfil}</b> — será debitado
@@ -59,8 +82,12 @@ async function perguntarAbrirFicha(id) {
     Depois de abrir, a Ficha Avançada (PJ — empresas e sócios) custa <b>+300 tokens</b>.`;
   abrirModal(async () => {
     fecharModal();
-    const fr = await fichaBasica(medicoAtual, true);
-    renderFicha(fr);
+    const fo = await fichaBasica(medicoAtual, true);
+    if (!fo.ok || fo.data.erro) {
+      mostraErro(fo.data.detalhe || fo.data.erro || `HTTP ${fo.status}`);
+      return;
+    }
+    renderFicha(fo.data);
     mostrar('fichaView');
     carregarSaldo().then(renderSaldo);
   });
@@ -128,19 +155,33 @@ async function perguntarAvancado() {
     para os dados PJ (empresas, quadro societário, CNAE, faturamento) dos vínculos do médico.`;
   abrirModal(async () => {
     fecharModal();
-    const r = await fichaAvancada(medicoAtual, true);
-    const box = $('areaAvancada');
-    if (r.aviso) {
-      box.innerHTML = `<p class="aviso">${r.aviso}</p>`;
-      $('btnAvancado').classList.add('oculto');
+    const res = await fichaAvancada(medicoAtual, true);
+    if (!res.ok || res.data.erro) {
+      if (res.data && res.data.aviso) {
+        $('areaAvancada').innerHTML = `<p class="aviso">${res.data.aviso}</p>`;
+        $('btnAvancado').classList.add('oculto');
+        return;
+      }
+      mostraErro((res.data && (res.data.detalhe || res.data.erro)) || `HTTP ${res.status}`);
       return;
     }
-    let html = `<p class="meta">${r.tokens_cobrados.toLocaleString('pt-BR')} tokens debitados por esta abertura</p>`;
-    for (const emp of r.empresas || []) {
-      const pj = emp.pj || {};
-      const dc = pj.DADOSCADASTRAIS || {};
-      const info = pj.INFOEMPRESA || {};
-      html += `<div class="bloco"><h4>${dc.RAZAO_SOCIAL || emp.cnpj}</h4><div class="kv">
+    renderAvancado(res.data);
+  });
+}
+
+function renderAvancado(r) {
+  const box = $('areaAvancada');
+  if (r.aviso) {
+    box.innerHTML = `<p class="aviso">${r.aviso}</p>`;
+    $('btnAvancado').classList.add('oculto');
+    return;
+  }
+  let html = `<p class="meta">${r.tokens_cobrados.toLocaleString('pt-BR')} tokens debitados por esta abertura</p>`;
+  for (const emp of r.empresas || []) {
+    const pj = emp.pj || {};
+    const dc = pj.DADOSCADASTRAIS || {};
+    const info = pj.INFOEMPRESA || {};
+    html += `<div class="bloco"><h4>${dc.RAZAO_SOCIAL || emp.cnpj}</h4><div class="kv">
         <dt>CNPJ</dt><dd>${emp.cnpj || '—'}</dd>
         <dt>Porte</dt><dd>${dc.PORTE || '—'} · ${dc.SITUACAO || '—'}</dd>
         <dt>Abertura</dt><dd>${dc.ABERTURA || '—'}</dd>
@@ -152,25 +193,25 @@ async function perguntarAvancado() {
         <tr><th>Nome</th><th>CPF/CNPJ</th><th>Qualificação</th><th>%</th></tr>
         ${(pj.QUADROSOCIETARIO || []).map((s) => `<tr><td>${s.NOME}</td><td>${s.CPF_CNPJ}</td><td>${s.QUALIFICACAO}</td><td>${s.PERCENTUAL || '—'}</td></tr>`).join('')}
       </table></div>`;
-    }
-    box.innerHTML = html;
-    $('btnAvancado').classList.add('oculto');
-    carregarSaldo().then(renderSaldo);
-  });
+  }
+  box.innerHTML = html;
+  $('btnAvancado').classList.add('oculto');
+  carregarSaldo().then(renderSaldo);
 }
 
 // ---------------- PAINEL / EXTRATO ----------------
 function renderSaldo(s) {
-  $('saldoTokens').textContent = s.saldo_tokens.toLocaleString('pt-BR');
-  $('saldoReais').textContent = `R$ ${s.saldo_reais.toLocaleString('pt-BR')}`;
+  $('saldoTokens').textContent = (s.saldo_tokens || 0).toLocaleString('pt-BR');
+  $('saldoReais').textContent = `R$ ${(s.saldo_reais || 0).toLocaleString('pt-BR')}`;
 }
 
 async function verExtrato() {
-  const data = await (await fetch('/api/v1/painel/extrato')).json();
+  const res = await fetch('/api/v1/painel/extrato').then((r) => r.json()).catch(() => ({ transacoes: [] }));
   const box = $('areaExtrato');
-  box.innerHTML = data.transacoes.length
+  const tx = Array.isArray(res.transacoes) ? res.transacoes : [];
+  box.innerHTML = tx.length
     ? '<table><tr><th>Quando</th><th>Tipo</th><th>Descrição</th><th>Tokens</th><th>Saldo após</th></tr>' +
-      data.transacoes.map((t) => `<tr><td>${t.ts}</td><td>${t.tipo}</td><td>${t.descricao}</td><td>${t.tokens}</td><td>${t.saldo_apos.toLocaleString('pt-BR')}</td></tr>`).join('')
+      tx.map((t) => `<tr><td>${t.ts}</td><td>${t.tipo}</td><td>${t.descricao}</td><td>${t.tokens}</td><td>${t.saldo_apos.toLocaleString('pt-BR')}</td></tr>`).join('')
     : '<p class="meta">Nenhuma transação ainda.</p>';
   mostrar('extratoView');
 }
