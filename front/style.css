@@ -653,6 +653,50 @@ td {
 }
 
 /* ------------------------------------------------------------------
+   Fase 5: estados (loading, empty, saldo)
+   ------------------------------------------------------------------ */
+/* skeleton loading row — ocupa o lugar de uma futura .lead */
+.skeleton-row {
+  background: linear-gradient(90deg, #F1F3F5 0%, #E9ECEF 50%, #F1F3F5 100%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s infinite ease-in-out;
+  border-radius: var(--r-sm);
+  height: 14px;
+  margin: 8px 0;
+}
+@keyframes sk-shimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: -200% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-row { animation: none; }
+}
+
+/* empty state — usado por extratoView e fallback de listas */
+.vazio {
+  text-align: center;
+  padding: 48px 24px;
+  background: #FAFBFC;
+  border: 1.5px dashed var(--c-border);
+  border-radius: var(--r-lg);
+  color: var(--c-muted);
+}
+.vazio .vazio-emoji { font-size: 44px; margin-bottom: 12px; }
+.vazio h3 { color: var(--c-secondary); font-size: 18px; margin-bottom: 6px; }
+.vazio p  { font-size: 13px; }
+
+/* saldo: estados warning < 100 tokens · critico < 10 */
+#saldoBox.saldo-baixo {
+  background: rgba(244,162,97,.20);
+  border-color: rgba(168,106,4,.50);
+}
+#saldoBox.saldo-critico {
+  background: rgba(230,57,70,.20);
+  border-color: rgba(230,57,70,.55);
+}
+#saldoBox.saldo-critico b { color: var(--c-warning-tint); }
+
+/* ------------------------------------------------------------------
    utilitários
    ------------------------------------------------------------------ */
 .oculto { display: none !important; }

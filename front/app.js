@@ -71,6 +71,13 @@ function renderModo(data) {
 // ---------------- LISTA (filtra no servidor · 50 por página) ----------------
 async function buscar(reiniciar) {
   if (reiniciar) { pagina = 0; acumulado = []; }
+  // Fase 5: estado loading enquanto busca
+  const lstEl = $('listaLeads');
+  if (lstEl && reiniciar) {
+    lstEl.innerHTML = '<div class="skeleton-row" style="width:80%"></div>' +
+      '<div class="skeleton-row" style="width:60%"></div>' +
+      '<div class="skeleton-row" style="width:75%"></div>';
+  }
   const f = {
     uf: $('fUf').value, cidade: $('fCidade').value,
     especialidade: $('fEspec').value, sub_especialidade: $('fSubEspec').value,
@@ -256,7 +263,7 @@ function renderFicha(r) {
     html += '</div>';
   }
 
-  html += '<div class="bloco"><h4>Pesquisa PF (Credify)</h4>';
+  html += '<div class="pf-bloco"><h4>Pesquisa PF (Credify) <span class="fonte-badge">Fonte: Receita Federal</span></h4>';
   if (r.pf && r.pf.dados_cadastrais) {
     // Credify retorna emails/telefones/enderecos como OBJETO {REGISTRO_1: {...}, REGISTRO_2: {...}}
     // (não array). E tambem aceita o shape MOCK (lista de objetos). O helper
@@ -306,16 +313,16 @@ function renderFicha(r) {
       <dt>Quadro societário</dt><dd><i>não incluído no nível básico</i></dd>
     </div>`;
   } else if (r.pf && r.pf.aviso) {
-    html += `<p class="aviso">${r.pf.aviso}</p>`;
+    html += `<div class="aviso" role="alert">ⓘ ${r.pf.aviso}</div>`;
   } else {
-    html += '<p class="aviso">Médico sem CPF — apenas dados cadastrais.</p>';
+    html += '<div class="aviso" role="status">Médico sem CPF — apenas dados cadastrais.</div>';
   }
   html += '</div>';
 
   // Diagnóstico visível quando ORACLE devolve shape parcial
   if (m._diagnostico_oracle && m._diagnostico_oracle.length) {
-    html += '<div class="aviso"><b>Diagnóstico Oracle:</b><ul>' +
-      m._diagnostico_oracle.map((d) => `<li>${d.secao}: ${d.erro}</li>`).join('') +
+    html += '<div class="aviso" role="alert"><b>Diagnóstico Oracle:</b><ul>' +
+      m._diagnostico_oracle.map((d) => `<li><code>${d.secao}</code>: ${d.erro}</li>`).join('') +
       '</ul></div>';
   }
 
@@ -372,7 +379,22 @@ function renderAvancado(r) {
     for (const k of Object.keys(o)) out[String(k).toLowerCase()] = o[k];
     return out;
   };
-  let header = `<p class="meta">${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados por esta abertura`;
+  // Fase 4: cabeçalho da Ficha Avançada (totais + economia + botões)
+  const tokensTotal = (r.tokens_cobrados || 0).toLocaleString('pt-BR');
+  const custoReais = ((r.tokens_cobrados || 0) * 0.25).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  let header = `<div class="ficha-cab" role="group" aria-label="Resumo da consulta avançada">
+      <div class="avatar" aria-hidden="true">PJ</div>
+      <div class="ficha-nome">
+        <h1>Empresas vinculadas</h1>
+        <div class="sub">${(r.empresas || []).length} ${(r.empresas || []).length === 1 ? 'empresa' : 'empresas'} retornadas pela Credify PJ</div>
+        ${r.cnpjs_totais !== undefined ? `<span class="perfil-badge">${r.cnpjs_unicos}/${r.cnpjs_totais} CNPJs · 2 raízes consultadas</span>` : ''}
+      </div>
+      <div class="ficha-custo">
+        <div class="valor">R$ ${custoReais}</div>
+        <div class="rot">Custo ficha avançada</div>
+        <small>${tokensTotal} tokens debitados</small>
+      </div>
+    </div><p class="meta">${tokensTotal} tokens debitados por esta abertura`;
   if (r.cnpjs_totais !== undefined) header += ` <span class="meta">— ${r.cnpjs_unicos}/${r.cnpjs_totais} CNPJs do quadro societário</span>`;
   header += `</p>`;
   let html = header;
@@ -418,18 +440,33 @@ function renderAvancado(r) {
 
 // ---------------- PAINEL / EXTRATO ----------------
 function renderSaldo(s) {
-  $('saldoTokens').textContent = (s.saldo_tokens || 0).toLocaleString('pt-BR');
+  const tk = (s.saldo_tokens || 0);
+  $('saldoTokens').textContent = tk.toLocaleString('pt-BR');
   $('saldoReais').textContent = `R$ ${(s.saldo_reais || 0).toLocaleString('pt-BR')}`;
+  // Fase 5: estado de saldo baixo (warning < 100 · critico < 10)
+  const box = $('saldoBox');
+  if (box) {
+    box.classList.toggle('saldo-baixo', tk > 0 && tk < 100);
+    box.classList.toggle('saldo-critico', tk < 10);
+  }
 }
 
+// Fase 5: empty/erro state visível para o extrato
 async function verExtrato() {
   const res = await fetch('/api/v1/painel/extrato').then((r) => r.json()).catch(() => ({ transacoes: [] }));
   const box = $('areaExtrato');
   const tx = Array.isArray(res.transacoes) ? res.transacoes : [];
-  box.innerHTML = tx.length
-    ? '<table><tr><th>Quando</th><th>Tipo</th><th>Descrição</th><th>Tokens</th><th>Saldo após</th></tr>' +
-      tx.map((t) => `<tr><td>${t.ts}</td><td>${t.tipo}</td><td>${t.descricao}</td><td>${t.tokens}</td><td>${t.saldo_apos.toLocaleString('pt-BR')}</td></tr>`).join('')
-    : '<p class="meta">Nenhuma transação ainda.</p>';
+  if (!tx.length) {
+    box.innerHTML = `<div class="vazio" role="status">
+        <div class="vazio-emoji" aria-hidden="true">🧾</div>
+        <h3>Nenhuma transação ainda</h3>
+        <p>Seus débitos e recargas aparecerão aqui assim que você abrir a primeira ficha.</p>
+      </div>`;
+    mostrar('extratoView');
+    return;
+  }
+  box.innerHTML = '<table><tr><th>Quando</th><th>Tipo</th><th>Descrição</th><th>Tokens</th><th>Saldo após</th></tr>' +
+    tx.map((t) => `<tr><td>${t.ts}</td><td>${t.tipo}</td><td>${t.descricao}</td><td>${t.tokens}</td><td>${t.saldo_apos.toLocaleString('pt-BR')}</td></tr>`).join('');
   mostrar('extratoView');
 }
 
