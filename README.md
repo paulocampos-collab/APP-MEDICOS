@@ -1,4 +1,4 @@
-# APP-MEDICOS — MVP de leads de médicos com créditos (tokens)
+# cnesfy — MVP de leads de médicos com créditos (tokens)
 
 Fluxo do produto (fechado com o cliente):
 
@@ -74,7 +74,7 @@ Endpoints: `POST /pfpesquisa` (IdConsulta 328) e `POST /pjpesquisa` (IdConsulta 
 ## Estrutura
 
 ```
-app-medicos/
+cnesfy/
 ├─ .env.example            # modelo de variáveis (só placeholders — sem segredos)
 ├─ .gitignore              # .env nunca vai pro git
 ├─ requirements.txt

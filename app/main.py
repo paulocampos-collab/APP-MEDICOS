@@ -1,4 +1,4 @@
-"""APP-MEDICOS — API FastAPI fina + front estático.
+"""cnesfy — API FastAPI fina + front estático.
 
 Executar:  uvicorn app.main:app --reload
 Modo mock: USE_MOCK=true (default) — sem Oracle e sem Credify reais.
@@ -17,7 +17,7 @@ from app.services.tokens import debitar, estornar, extrato
 
 FRONT_DIR = Path(__file__).resolve().parent.parent / "front"
 
-app = FastAPI(title="APP-MEDICOS", version="0.1.0",
+app = FastAPI(title="cnesfy", version="0.1.0",
               description="Leads de médicos com créditos (mock)")
 
 app.mount("/static", StaticFiles(directory=str(FRONT_DIR)), name="static")
