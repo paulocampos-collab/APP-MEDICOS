@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APP-MEDICOS · Leads de médicos</title>
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header>
+  <h1>🩺 APP-MEDICOS</h1>
+  <div id="saldoBox">Saldo: <b id="saldoTokens">—</b> tokens<br><span id="saldoReais">R$ —</span></div>
+</header>
+<main>
+  <div class="nav">
+    <button class="btn ghost oculto" id="btnVoltar">← Voltar à lista</button>
+    <button class="btn teal oculto" id="btnAvancado">Ficha Avançada (+300)</button>
+    <button class="btn ghost" id="btnExtrato">Extrato de uso</button>
+  </div>
+
+  <!-- VIEW 1: busca + lista anonimizada (grátis) -->
+  <section id="listaView">
+    <div class="card">
+      <h2>🔍 Busca de médicos (grátis)</h2>
+      <div class="grade-filtros">
+        <div class="campo"><label>UF</label>
+          <select id="fUf">
+            <option value="">Todas</option>
+            <option>SP</option><option>RJ</option><option>MG</option>
+            <option>PR</option><option>BA</option><option>RS</option>
+          </select></div>
+        <div class="campo"><label>Cidade</label>
+          <select id="fCidade">
+            <option value="">Todas</option>
+            <option>SAO PAULO</option><option>RIO DE JANEIRO</option>
+            <option>BELO HORIZONTE</option><option>CURITIBA</option>
+            <option>SALVADOR</option><option>PORTO ALEGRE</option>
+          </select></div>
+        <div class="campo"><label>Especialidade</label>
+          <select id="fEspec">
+            <option value="">Todas</option>
+            <option>Cardiologia</option><option>Dermatologia</option>
+            <option>Clinica Medica</option><option>Pediatria</option>
+            <option>Hemodinamica</option>
+          </select></div>
+        <div class="campo"><label>Residência</label>
+          <select id="fResid">
+            <option value="">Todas</option>
+            <option>Cardiologia</option><option>Hemodinamica</option>
+            <option>Dermatologia</option><option>Pediatria</option>
+          </select></div>
+        <div class="campo"><label>Situação do CRM</label>
+          <select id="fSit">
+            <option value="">Todas</option><option>ATIVO</option><option>SUSPENSO</option>
+          </select></div>
+        <div class="campo"><label>Sexo</label>
+          <select id="fSexo">
+            <option value="">Todos</option><option>F</option><option>M</option>
+          </select></div>
+        <div class="campo"><label>Faixa etária</label>
+          <select id="fFaixa">
+            <option value="">Todas</option>
+            <option>ATE_29</option><option>30_39</option><option>40_49</option>
+            <option>50_59</option><option>60_MAIS</option>
+          </select></div>
+        <div class="campo" style="display:flex;align-items:flex-end">
+          <button class="btn" id="btnBuscar" style="width:100%">Buscar</button>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="fEnr"> apenas leads com PF/PJ disponível</label>
+    </div>
+    <div class="card">
+      <h2>📋 Leads encontrados (anonimizado · nome mascarado)</h2>
+      <div id="listaLeads"></div>
+    </div>
+  </section>
+
+  <!-- VIEW 2: ficha básica + avançada -->
+  <section id="fichaView" class="oculto">
+    <div class="card"><div id="areaFicha"></div></div>
+    <div class="card"><div id="areaAvancada"></div></div>
+  </section>
+
+  <!-- VIEW 3: extrato -->
+  <section id="extratoView" class="oculto">
+    <div class="card"><h2>🧾 Extrato de uso (mock)</h2><div id="areaExtrato"></div></div>
+  </section>
+</main>
+
+<!-- modal de confirmação de débito -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitulo"></h3>
+    <p id="modalTexto"></p>
+    <div class="acoes">
+      <button class="btn ghost" id="modalNao">Cancelar</button>
+      <button class="btn" id="modalSim">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="static/app.js"></script>
+</body>
+</html>
