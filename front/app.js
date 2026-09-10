@@ -138,19 +138,77 @@ async function perguntarAbrirFicha(id) {
       mostraErro(fo.data.detalhe || fo.data.erro || `HTTP ${fo.status}`);
       return;
     }
-    renderFicha(fo.data);
+    // IMPORTANTE: mostrar('fichaView') DEVE rodar mesmo se renderFicha
+    // explodir. Antes a ficha sumia e o usuário voltava pra lista sem
+    // entender o que aconteceu (bug reportado em produção).
+    try {
+      renderFicha(fo.data);
+    } catch (e) {
+      console.error('renderFicha falhou:', e, 'payload:', fo.data);
+      const box = $('areaFicha');
+      if (box) box.innerHTML = `<div class="erro"><b>Erro ao renderizar ficha.</b>
+          <pre style="white-space:pre-wrap;font-size:11px">${(e && e.stack || String(e)).replace(/</g,'&lt;')}</pre>
+          <details><summary>payload bruto</summary>
+          <pre style="white-space:pre-wrap;font-size:11px">${JSON.stringify(fo.data, null, 2).replace(/</g,'&lt;')}</pre></details></div>`;
+    }
     mostrar('fichaView');
     carregarSaldo().then(renderSaldo);
   });
 }
 
 function renderFicha(r) {
-  const m = r.dados_medico;
+  // Helpers defensivos — o backend ORACLE pode devolver chaves em CAIXA ALTA
+  // (CREDI01301 etc.) dependendo do SELECT e dos aliases ("AS "). O front
+  // precisa ser robusto a qualquer combinação de chaves minúsculas/maiúsculas
+  // e a campos nulos. Sem isso renderFicha explodia em PROD e a fichaView
+  // nunca aparecia.
+  const pick = (obj, ...keys) => {
+    if (!obj) return undefined;
+    for (const k of keys) {
+      if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+    }
+    return undefined;
+  };
+  const normObj = (o) => {
+    if (!o || typeof o !== 'object') return {};
+    const out = {};
+    for (const k of Object.keys(o)) out[String(k).toLowerCase()] = o[k];
+    return out;
+  };
+  const normArr = (a) => Array.isArray(a) ? a.map(normObj) : [];
+  const normIdKey = (v) => v; // id_crm chega como int ou Decimal — comparamos por string
+
+  const m0 = r && r.dados_medico ? r.dados_medico : {};
+  // copia + chaves lowercased (somente leitura segura)
+  const m = {};
+  for (const k of Object.keys(m0)) m[String(k).toLowerCase()] = m0[k];
+  const crms = normArr(m.crms);
+  // especialidades pode ser objeto {id_crm: []} OU lista [{...,id_crm:...}]
+  const espRaw = m.especialidades;
+  let espPorCrm = {};
+  if (Array.isArray(espRaw)) {
+    for (const e of espRaw) {
+      const k = pick(e, 'id_crm', 'ID_CRM');
+      if (k === undefined) continue;
+      (espPorCrm[normIdKey(k)] = espPorCrm[normIdKey(k)] || []).push(normObj(e));
+    }
+  } else if (espRaw && typeof espRaw === 'object') {
+    for (const k of Object.keys(espRaw)) {
+      espPorCrm[normIdKey(k)] = normArr(espRaw[k]);
+    }
+  }
+  const situacaoChip = (s) => {
+    const u = String(s || '').toUpperCase();
+    if (u === 'ATIVO') return 'teal';
+    if (u === 'CANCELADO' || u === 'SUSPENSO') return 'amber';
+    return '';
+  };
   let html = `<div class="bloco"><h4>Médico (base)</h4><div class="kv">
-      <dt>Nome</dt><dd>${m.nome}</dd>
-      <dt>Perfil</dt><dd><span class="chip">${r.perfil}</span>
-        <span class="chip teal">${r.tokens_cobrados.toLocaleString('pt-BR')} tokens debitados</span></dd>
-      <dt>Faculdade</dt><dd>${m.instituicao_graduacao || '—'} (${m.ano_conclusao || '—'})</dd>
+      <dt>Nome</dt><dd>${pick(m, 'nome','NOME') || '—'}</dd>
+      <dt>Perfil</dt><dd><span class="chip">${r.perfil || '—'}</span>
+        <span class="chip teal">${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados</span></dd>
+      <dt>Faculdade</dt><dd>${pick(m, 'instituicao_graduacao','INSTITUICAO_GRADUACAO') || '—'}
+          (${pick(m, 'ano_conclusao','ANO_CONCLUSAO') || '—'})</dd>
       ${r.cpf_base_mascarado
         ? `<dt>CPF</dt><dd>${r.cpf_base_mascarado}${r.cpf_enviado_credify && r.cpf_base_mascarado.replace(/\D/g,'') !== r.cpf_enviado_credify
             ? ` <span class="chip amber">enviado p/ Credify: ${r.cpf_enviado_credify}</span>` : ''}</dd>`
@@ -158,35 +216,28 @@ function renderFicha(r) {
     </div></div>`;
 
   // CRMs ESPECIALIDADES / RQE agrupados por CRM (cada RQE pertence a um CRM especifico).
-  // Mostra 1 bloco por CRM com suas especialidades/RQE abaixo.
-  const crms = m.crms || [];
-  const espPorCrm = m.especialidades || {};
-  const situacaoChip = (s) => {
-    const u = String(s || '').toUpperCase();
-    if (u === 'ATIVO') return 'teal';
-    if (u === 'CANCELADO' || u === 'SUSPENSO') return 'amber';
-    return '';
-  };
   html += '<div class="bloco"><h4>CRMs, Especialidades e RQE</h4>';
   if (!crms.length) {
     html += '<p class="meta">Sem CRM registrado.</p>';
   } else {
     for (const c of crms) {
-      const lista = espPorCrm && (espPorCrm[c.id_crm] || espPorCrm[String(c.id_crm)] || []);
-      html += `<div class="crm-grupo">
-        <div class="crm-cabecalho">
-          <span class="chip">${c.crm}</span>
-          <span class="chip">${c.uf}</span>
-          <span class="chip ${situacaoChip(c.situacao)}">${c.situacao || '—'}</span>
-        </div>
-        <div class="crm-especialidades">`;
+      const idcrm = pick(c, 'id_crm','ID_CRM');
+      const lista = (idcrm !== undefined
+        ? (espPorCrm[idcrm] || espPorCrm[String(idcrm)] || (typeof espPorCrm === 'object' ? espPorCrm[idcrm] : []))
+        : []) || [];
+      html += `<div class="crm-grupo"><div class="crm-cabecalho">
+          <span class="chip">${pick(c, 'crm','CRM') || '—'}</span>
+          <span class="chip">${pick(c, 'uf','UF') || '—'}</span>
+          <span class="chip ${situacaoChip(pick(c, 'situacao','SITUACAO'))}">${pick(c, 'situacao','SITUACAO') || '—'}</span>
+        </div><div class="crm-especialidades">`;
       if (!lista.length) {
         html += '<p class="meta">Sem especialidade registrada neste CRM.</p>';
       } else {
         for (const e of lista) {
-          html += `<span class="chip">${e.especialidade}</span>`;
-          if (e.rqe) html += `<span class="chip teal">RQE ${e.rqe}</span>`;
-          if (e.flag_sub || e.id_esp_sub) html += `<span class="chip amber">sub</span>`;
+          html += `<span class="chip">${pick(e, 'especialidade','ESPECIALIDADE') || '—'}</span>`;
+          const rqe = pick(e, 'rqe','RQE');
+          if (rqe) html += `<span class="chip teal">RQE ${rqe}</span>`;
+          if (pick(e, 'flag_sub','FLAG_SUB') || pick(e, 'id_esp_sub','ID_ESP_SUB')) html += '<span class="chip amber">sub</span>';
         }
       }
       html += '</div></div>';
@@ -194,20 +245,26 @@ function renderFicha(r) {
   }
   html += '</div>';
 
-  if (m.residencias && m.residencias.length) {
+  const resid = normArr(m.residencias);
+  if (resid.length) {
     html += '<div class="bloco"><h4>Residências</h4>';
-    for (const x of m.residencias) html += `<span class="chip teal">${x.programa}${x.instituicao ? ' · ' + x.instituicao : ''}</span> `;
+    for (const x of resid) {
+      const prog = pick(x, 'programa','NM_PROGRAMA','PROGRAMA') || '—';
+      const inst = pick(x, 'instituicao','NM_INSTITUICAO','INSTITUICAO');
+      html += `<span class="chip teal">${prog}${inst ? ' · ' + inst : ''}</span> `;
+    }
     html += '</div>';
   }
 
   html += '<div class="bloco"><h4>Pesquisa PF (Credify)</h4>';
   if (r.pf && r.pf.dados_cadastrais) {
+    const dc = r.pf.dados_cadastrais;
     html += `<div class="kv">
-      <dt>Nome PF</dt><dd>${r.pf.dados_cadastrais.NOME || '—'}</dd>
-      <dt>Nascimento</dt><dd>${r.pf.dados_cadastrais.NASCIMENTO || '—'}</dd>
-      <dt>E-mail</dt><dd>${(r.pf.emails || []).map((x) => x.ENDERECO).join(', ') || '—'}</dd>
-      <dt>Telefones</dt><dd>${(r.pf.telefones || []).map((x) => `(${x.DDD}) ${x.NUMERO}`).join(', ') || '—'}</dd>
-      <dt>Endereço PF</dt><dd>${(r.pf.enderecos || []).map((x) => x.LOGRADOURO).join('; ') || '—'}</dd>
+      <dt>Nome PF</dt><dd>${dc.NOME || dc.nome || '—'}</dd>
+      <dt>Nascimento</dt><dd>${dc.NASCIMENTO || dc.nascimento || '—'}</dd>
+      <dt>E-mail</dt><dd>${((r.pf.emails)||[]).map((x) => x.ENDERECO || x.endereco || '').filter(Boolean).join(', ') || '—'}</dd>
+      <dt>Telefones</dt><dd>${((r.pf.telefones)||[]).map((x) => `(${x.DDD||x.ddd||''}) ${x.NUMERO||x.numero||''}`).filter(Boolean).join(', ') || '—'}</dd>
+      <dt>Endereço PF</dt><dd>${((r.pf.enderecos)||[]).map((x) => x.LOGRADOURO || x.logradouro || '').filter(Boolean).join('; ') || '—'}</dd>
       <dt>Quadro societário</dt><dd><i>não incluído no nível básico</i></dd>
     </div>`;
   } else if (r.pf && r.pf.aviso) {
@@ -216,6 +273,13 @@ function renderFicha(r) {
     html += '<p class="aviso">Médico sem CPF — apenas dados cadastrais.</p>';
   }
   html += '</div>';
+
+  // Diagnóstico visível quando ORACLE devolve shape parcial
+  if (m._diagnostico_oracle && m._diagnostico_oracle.length) {
+    html += '<div class="aviso"><b>Diagnóstico Oracle:</b><ul>' +
+      m._diagnostico_oracle.map((d) => `<li>${d.secao}: ${d.erro}</li>`).join('') +
+      '</ul></div>';
+  }
 
   $('areaFicha').innerHTML = html;
   $('areaAvancada').innerHTML = '';
