@@ -614,15 +614,14 @@ function renderAvancado(r) {
     for (const k of Object.keys(o)) out[String(k).toLowerCase()] = o[k];
     return out;
   };
-  // Layout pós-desbloqueio (mesma página) — bate com o mockup:
-  //  Coluna esquerda: Empresas vinculadas (cards completos de cada PJ).
-  //  Coluna direita:
-  //    - "Outros vínculos" (não-empresa: institutos, hospitais onde é diretor).
-  //    - "Resumo da consulta" (totais + economia por reuso de raiz CNPJ).
-  // Sem bloco de custo no cabeçalho do médico (regra do usuário).
-  const tokensTotal = (r.tokens_cobrados || 0);
-  const reaisPF = (300 * 0.25).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); // R$ 75,00 referência mockup
-  const reaisBase = (r.cnpjs_unicos || 0) > 0 ? ((r.cnpjs_unicos * 300 * 0.25)).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—';
+  // Layout pós-desbloqueio (mesma página) — cards empilhados (1 por linha):
+  //  1) Empresas vinculadas (cards completos de cada PJ, um após o outro).
+  //  2) "Outros vínculos" (não-empresa: institutos, hospitais onde é diretor).
+  //  3) "Resumo da consulta" (totais da busca, sem preço).
+  // Sem bloco de custo no cabeçalho do médico (regra do usuário) e sem preço
+  // depois de aberto (regra desta edição).
+  // (preço removido por design — após o desbloqueio a ficha avançada mostra
+  //  apenas dados: empresas, sócios e resumo. Débito/custo ficam no modal de confirmação.)
 
   // separa empresas "matriz (vinculada como sócia direta)" dos "outros vínculos"
   const empresas = Array.isArray(r.empresas) ? r.empresas : [];
@@ -692,7 +691,7 @@ function renderAvancado(r) {
       html += '</div>';
     }
 
-    // COLUNA DIREITA: Outros vínculos + Resumo
+    // BLOCO INFERIOR: Outros vínculos + Resumo (cards empilhados, um abaixo do outro)
     html += '<div class="aside-col">';
     if (outrasMatrizes.length) {
       html += '<div class="pj-card" style="background:#fff;border-color:var(--c-border);border-style:dashed"><div class="pj-cab">Outros vínculos (não-PJ)</div><div class="pj-list">';
@@ -708,8 +707,6 @@ function renderAvancado(r) {
       <div class="kv">
         <dt>Vínculos encontrados</dt><dd>${r.cnpjs_totais ? r.cnpjs_totais + ' CNPJs' : empresas.length + ' entidade(s)'} <span class="meta">(${r.cnpjs_unicos || 0} ${(r.cnpjs_unicos || 0) === 1 ? 'raiz' : 'raízes'})</span></dd>
         <dt>Chamadas Credify</dt><dd>${r.pj_consultadas || (r.cnpjs_unicos || 0)} <span class="chip teal">(reuso por raiz)</span></dd>
-        <dt>Custo PF (já cobrado)</dt><dd>R$ ${reaisPF}</dd>
-        <dt>Custo avançada</dt><dd><b class="custo">R$ ${reaisBase}</b></dd>
       </div>
     </div></div>`;
   }

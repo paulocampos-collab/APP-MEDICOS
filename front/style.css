@@ -541,13 +541,13 @@ table.lead-table tbody tr:focus { outline: 2px solid var(--c-primary); outline-o
 .chip-filial    { background: #E9ECEF; color: #495057; font-size: 10px; padding: 2px 7px; border-radius: 4px; margin-left: 6px; text-transform: uppercase; }
 
 /* ---------- layout Ficha Avançada (match mockup: 2 colunas / resumo) ---------- */
-.grid-2col       { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap: 16px; align-items: start; }
+.grid-2col       { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start; }
 .aside-col       { display: flex; flex-direction: column; gap: 16px; }
 .resume-card     { background: #fff; border: 1px solid var(--c-border); border-radius: var(--r-md); padding: 14px 16px; }
 .resume-card .pj-cab { color: var(--c-secondary); }
 .socio-list      { border-top: 1px dashed var(--c-border); padding-top: 6px; }
 .pj-list         { display: flex; flex-direction: column; gap: 6px; }
-.pj-end          { border-top: 1px dashed var(--c-primary-border); padding-top: 8px; }
+.pj-end          { border-top: 1px dashed var(--c-border); padding-top: 10px; }
 @media (max-width: 920px) { .grid-2col { grid-template-columns: 1fr; } }
 
 /* cabeçalho do médico sem custo no lado direito */
@@ -658,13 +658,13 @@ table.lead-table tbody tr:focus { outline: 2px solid var(--c-primary); outline-o
 .card-ficha     { padding: 20px; }
 .ficha-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .ficha-title    { font-size: 20px; color: var(--c-secondary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.chip-avancada  { background: var(--c-primary-tint); color: var(--c-primary-dark); border: 1px solid var(--c-primary-border); font-weight: 700; }
+.chip-avancada  { background: #eef2f6; color: var(--c-secondary); border: 1px solid var(--c-border); font-weight: 700; }
 .ficha-chips    { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .ficha-secao    { display: flex; align-items: center; gap: 12px; margin: 18px 0 10px; }
 .ficha-secao .num { width: 26px; height: 26px; border-radius: 50%; background: var(--c-secondary); color: #fff; font-size: 13px; font-weight: 800; display: grid; place-items: center; flex: 0 0 auto; }
 .ficha-secao h3 { color: var(--c-secondary); font-size: 15px; margin: 0; text-transform: none; letter-spacing: 0; }
 .ficha-secao p  { color: var(--c-muted); font-size: 12px; margin: 0; }
-.ficha-lock      { border: 2px dashed var(--c-primary-border); background: var(--c-primary-tint); border-radius: var(--r-lg); padding: 32px 20px; text-align: center; }
+.ficha-lock      { border: 1.5px dashed var(--c-border-strong); background: #f8fafc; border-radius: var(--r-lg); padding: 32px 20px; text-align: center; }
 .ficha-lock-emoji { font-size: 40px; margin-bottom: 10px; }
 .ficha-lock h3   { color: var(--c-secondary); font-size: 16px; margin-bottom: 8px; }
 .ficha-lock p    { color: var(--c-text-soft); font-size: 13.5px; max-width: 460px; margin: 0 auto 16px; }
@@ -692,10 +692,10 @@ table.lead-table tbody tr:focus { outline: 2px solid var(--c-primary); outline-o
 .crm-cabecalho   { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--c-border); }
 .crm-especialidades { display: flex; flex-wrap: wrap; gap: 4px; }
 
-.pj-card         { border: 1.5px solid var(--c-primary-border); background: var(--c-primary-tint); border-radius: var(--r-md); padding: 16px; margin-bottom: 12px; }
+.pj-card         { border: 1px solid var(--c-border); background: #fff; border-radius: var(--r-md); padding: 18px 20px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.05); }
 .pj-cab          { font-size: 11px; color: var(--c-muted); text-transform: uppercase; letter-spacing: .4px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; }
 .pj-nome         { color: var(--c-secondary); font-size: 15px; font-weight: 800; margin-bottom: 8px; }
-.pj-meta         { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--c-primary-border); }
+.pj-meta         { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; font-size: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--c-border); }
 .pj-meta .l      { color: var(--c-muted); font-size: 11px; }
 .pj-meta .v      { font-weight: 600; }
 .socio-row       { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--c-border); font-size: 12px; }
