@@ -1,4 +1,10 @@
-"""Camada de dados: mock (USE_MOCK=true) ou Oracle real (USE_MOCK=false)."""
+"""Camada de dados: escolhe mock (USE_MOCK=true) ou Oracle real (USE_MOCK=false).
+
+Funções públicas (mesma assinatura nos dois modos):
+  listar_medicos(filtros) -> lista anonimizada de leads
+  detalhe_medico(id)      -> dados completos do médico (base)
+  consultar_pf(cpf) / consultar_pj(cnpj) -> payloads Credify
+"""
 from app import config
 
 if config.USE_MOCK:
@@ -6,7 +12,8 @@ if config.USE_MOCK:
                                ENDERECOS, SIMULACOES_PF, SIMULACOES_PJ,
                                CPF_NAO_ENCONTRADO, CNPJ_NAO_ENCONTRADO)
 else:
-    from app.db.queries import (consultar_medico, consultar_crms,
+    from app.db.queries import (consultar_medicos as _consultar_medicos_oracle,
+                                consultar_medico, consultar_crms,
                                 consultar_especialidades, consultar_residencias,
                                 consultar_enderecos)
     from app.credify.client import CredifyClient
@@ -15,12 +22,11 @@ from app.services.endereco import escolher_principal
 from app.services.anonimizacao import mascara_nome
 
 
-# ---------------------------------------------------------------- mock ---
 def _idade(dt_nasc):
     import datetime
     if not dt_nasc:
         return None
-    n = datetime.date.fromisoformat(dt_nasc)
+    n = datetime.date.fromisoformat(str(dt_nasc)[:10])
     hoje = datetime.date.today()
     return hoje.year - n.year - ((hoje.month, hoje.day) < (n.month, n.day))
 
@@ -39,15 +45,17 @@ def _faixa_etaria(idade):
     return "60_MAIS"
 
 
-def listar_medicos(filtros=None):
-    filtros = filtros or {}
+# =========================================================================
+# MODO MOCK — fixtures de app/mock_data.py
+# =========================================================================
+def _listar_medicos_mock(filtros):
     resultado = []
     for m in MEDICOS:
         crms = CRMS.get(m["id_medico"], [])
         esp_por_crm = []
         for c in crms:
             esp_por_crm += ESPECIALIDADES.get(c["id_crm"], [])
-        end = _endereco_principal(m["id_medico"])
+        end = escolher_principal(ENDERECOS.get(m["id_medico"], []))
         cidade = (end or {}).get("ds_city")
         uf = (end or {}).get("co_stte")
         bairro = (end or {}).get("ds_dist")
@@ -88,8 +96,50 @@ def listar_medicos(filtros=None):
     return resultado
 
 
-def _endereco_principal(id_medico):
-    return escolher_principal(ENDERECOS.get(id_medico, []))
+# =========================================================================
+# MODO ORACLE — SQL hardcoded em app/db/queries.py
+# =========================================================================
+def _listar_medicos_oracle(filtros):
+    resultado = []
+    for r in _consultar_medicos_oracle():
+        uf = r.get("UF") or r.get("CO_STTE")
+        cidade = r.get("DS_CITY")
+        bairro = r.get("BAIRRO") or r.get("DS_DIST")
+        esp = [p.strip() for p in (r.get("ESPECIALIDADES") or "").split(";") if p.strip()]
+        resid = [x.strip() for x in (r.get("RESIDENCIAS") or "").split(";") if x.strip()]
+        situacao = r.get("SITUACAO_CRM")
+        cpf = r.get("CPF")
+
+        if filtros.get("uf") and filtros["uf"].upper() != (uf or "").upper():
+            continue
+        if filtros.get("cidade") and filtros["cidade"].upper() != (cidade or "").upper():
+            continue
+        if filtros.get("especialidade") and filtros["especialidade"].upper() not in [p.upper() for p in esp]:
+            continue
+        if filtros.get("residencia") and filtros["residencia"].upper() not in [x.upper() for x in resid]:
+            continue
+        if filtros.get("situacao_crm") and filtros["situacao_crm"].upper() != (situacao or "").upper():
+            continue
+        if filtros.get("apenas_com_enriquecimento") and not cpf:
+            continue
+
+        resultado.append({
+            "id_medico": r.get("ID_MEDICO"),
+            "nome_anonimizado": mascara_nome(r.get("NOME")),
+            "especialidades": esp or ["NAO_INFORMADO"],
+            "cidade": cidade, "uf": uf, "bairro": bairro,
+            "situacao_crm": situacao,
+            "faixa_etaria": None, "sexo": None,  # dependem de staging (a evoluir)
+            "tem_enriquecimento": bool(cpf),
+        })
+    return resultado
+
+
+def listar_medicos(filtros=None):
+    filtros = filtros or {}
+    if config.USE_MOCK:
+        return _listar_medicos_mock(filtros)
+    return _listar_medicos_oracle(filtros)
 
 
 def detalhe_medico(id_medico):
@@ -109,7 +159,7 @@ def detalhe_medico(id_medico):
             "crms": crms,
             "especialidades": {c["id_crm"]: ESPECIALIDADES.get(c["id_crm"], []) for c in crms},
             "residencias": RESIDENCIAS.get(m["id_medico"], []),
-            "endereco_principal": _endereco_principal(m["id_medico"]),
+            "endereco_principal": escolher_principal(ENDERECOS.get(m["id_medico"], [])),
         }
     m = consultar_medico(id_medico)
     if not m:

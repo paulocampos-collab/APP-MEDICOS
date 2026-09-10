@@ -12,7 +12,6 @@ import time
 import httpx
 
 from app import config
-from app import repositorio  # noqa: F401  (apenas para não circular no mock)
 
 _TOKEN = {"valor": None, "expira_em": 0.0}
 
