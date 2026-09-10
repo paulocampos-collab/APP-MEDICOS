@@ -13,6 +13,7 @@ if config.USE_MOCK:
                                CPF_NAO_ENCONTRADO, CNPJ_NAO_ENCONTRADO)
 else:
     from app.db.queries import (consultar_medicos_com_filtros,
+                                consultar_opcoes_filtros,
                                 consultar_medico, consultar_crms,
                                 consultar_especialidades, consultar_residencias,
                                 consultar_enderecos)
@@ -20,6 +21,7 @@ else:
 
 from app.services.endereco import escolher_principal
 from app.services.anonimizacao import mascara_nome
+from app.services.texto import normalizar
 
 
 def _idade(dt_nasc):
@@ -70,8 +72,12 @@ def _listar_medicos_mock(filtros):
             continue
         if filtros.get("especialidade") and filtros["especialidade"].upper() not in [p.upper() for p in perfis]:
             continue
-        if filtros.get("sub_especialidade") and not any(e.get("flag_sub") or e.get("id_esp_sub") for e in esp_por_crm):
-            continue
+        if filtros.get("sub_especialidade"):
+            sub = filtros["sub_especialidade"].upper()
+            tem_sub = any(normalizar(e.get("especialidade")) == sub
+                          and (e.get("flag_sub") or e.get("id_esp_sub")) for e in esp_por_crm)
+            if not tem_sub:
+                continue
         if filtros.get("residencia") and filtros["residencia"].upper() not in [r.upper() for r in resid_prog]:
             continue
         if filtros.get("situacao_crm") and filtros["situacao_crm"].upper() not in [s.upper() for s in sit_crms]:
@@ -126,6 +132,49 @@ def listar_medicos(filtros=None, limite=50, offset=0):
         todos = _listar_medicos_mock(filtros)
         return todos[offset:offset + limite], len(todos)
     return _listar_medicos_oracle(filtros, limite, offset)
+
+
+# =========================================================================
+# Opções de filtro (dropdowns) — mock e Oracle com o MESMO padrão
+# (caixa alta, sem acento, ordenado)
+# =========================================================================
+def _obter_opcoes_mock(uf=None, especialidade=None):
+    ufs = sorted({normalizar(e["co_stte"]) for lista in ENDERECOS.values()
+                  for e in lista if e.get("co_stte")})
+    cidades = sorted({normalizar(e["ds_city"]) for lista in ENDERECOS.values()
+                      for e in lista if e.get("ds_city")
+                      and (not uf or normalizar(e["co_stte"]) == uf)})
+
+    esp_principais = set()
+    subs = set()
+    for lista in ESPECIALIDADES.values():
+        # pai = linha do mesmo CRM sem flag_sub/id_esp_sub; sub = demais
+        pais = {normalizar(e.get("especialidade"))
+                for e in lista if not (e.get("flag_sub") or e.get("id_esp_sub"))}
+        esp_principais.update(p for p in pais if p)
+        for e in lista:
+            if e.get("flag_sub") or e.get("id_esp_sub"):
+                nome = normalizar(e.get("especialidade"))
+                if nome and (not especialidade or especialidade in pais):
+                    subs.add(nome)
+
+    residencias = sorted({normalizar(r.get("programa")) for lista in RESIDENCIAS.values()
+                          for r in lista if r.get("programa")})
+    return {
+        "ufs": ufs,
+        "cidades": cidades,
+        "especialidades": sorted(esp_principais),
+        "subespecialidades": sorted(subs),
+        "residencias": residencias,
+    }
+
+
+def obter_opcoes_filtros(uf=None, especialidade=None):
+    uf = (uf or "").upper() or None
+    especialidade = (especialidade or "").upper() or None
+    if config.USE_MOCK:
+        return _obter_opcoes_mock(uf=uf, especialidade=especialidade)
+    return consultar_opcoes_filtros(uf=uf, especialidade=especialidade)
 
 
 def detalhe_medico(id_medico):

@@ -14,6 +14,16 @@ a base inteira em memória — devolve no máximo `limite` linhas por chamada.
 from app.db.oracle import executar
 
 # =========================================================================
+# Padrão do produto: CAIXA ALTA + SEM ACENTUAÇÃO (igual nos dois modos)
+# =========================================================================
+_ACENTOS = "ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ"
+_SEM_ACENTO = "AAAAAEEEEIIIIOOOOOUUUUC"
+
+
+def _norm(col):
+    return f"UPPER(TRANSLATE(TRIM({col}), '{_ACENTOS}', '{_SEM_ACENTO}'))"
+
+# =========================================================================
 # 1 endereço principal por médico (regra fechada: tipo -> completude ->
 # CEP válido -> menor NU_ADDR)
 # =========================================================================
@@ -77,7 +87,15 @@ def montar_where(filtros):
         conds.append(
             "EXISTS (SELECT 1 FROM credpf.credi01301 c2 "
             "JOIN credpf.credi01302 e2 ON e2.ID_CRM = c2.ID_CRM "
-            "WHERE c2.ID_MEDICO = m.ID_MEDICO AND UPPER(e2.ESPECIALIDADE) = :esp)")
+            "WHERE c2.ID_MEDICO = m.ID_MEDICO AND UPPER(e2.ESPECIALIDADE) = :esp "
+            "AND e2.ID_ESP_SUB IS NULL)")
+    if filtros.get("sub_especialidade"):
+        params["sub"] = str(filtros["sub_especialidade"]).upper()
+        conds.append(
+            "EXISTS (SELECT 1 FROM credpf.credi01302 e4 "
+            "WHERE e4.ID_CRM IN (SELECT c4.ID_CRM FROM credpf.credi01301 c4 "
+            "WHERE c4.ID_MEDICO = m.ID_MEDICO) "
+            "AND e4.ID_ESP_SUB IS NOT NULL AND " + _norm("e4.ESPECIALIDADE") + " = :sub)")
     if filtros.get("residencia"):
         params["res"] = str(filtros["residencia"]).upper()
         conds.append(
@@ -150,6 +168,69 @@ SELECT NU_ADDR, CO_TYPE_ADDR, CO_TYPE_LOGR, DS_NAME_LOGR, CO_NUMB_LOGR,
 FROM   Paulo.tmp_endereco_medico_principal
 WHERE  ID_MEDICO = :id
 """
+
+
+# =========================================================================
+# Opções de filtro (dropdowns) — carregadas DO BANCO
+# uf/cidades  -> Paulo.tmp_endereco_medico_principal
+# especialidade/sub -> credpf.credi01302 (sub = linha com ID_ESP_SUB)
+# residencia -> credpf.credi01303 (NM_PROGRAMA)
+# =========================================================================
+def consultar_opcoes_filtros(uf=None, especialidade=None):
+    opcoes = {"ufs": [], "cidades": [], "especialidades": [],
+              "subespecialidades": [], "residencias": []}
+
+    opcoes["ufs"] = [r["UF"] for r in executar(
+        "SELECT DISTINCT " + _norm("CO_STTE") + " AS UF"
+        " FROM Paulo.tmp_endereco_medico_principal"
+        " WHERE CO_STTE IS NOT NULL"
+        " ORDER BY UF")]
+
+    if uf:
+        opcoes["cidades"] = [r["CIDADE"] for r in executar(
+            "SELECT DISTINCT " + _norm("DS_CITY") + " AS CIDADE"
+            " FROM Paulo.tmp_endereco_medico_principal"
+            " WHERE DS_CITY IS NOT NULL AND " + _norm("CO_STTE") + " = :uf"
+            " ORDER BY CIDADE", {"uf": str(uf).upper()})]
+    else:
+        opcoes["cidades"] = [r["CIDADE"] for r in executar(
+            "SELECT DISTINCT " + _norm("DS_CITY") + " AS CIDADE"
+            " FROM Paulo.tmp_endereco_medico_principal"
+            " WHERE DS_CITY IS NOT NULL"
+            " ORDER BY CIDADE")]
+
+    # Especialidade PRINCIPAL = linha SEM ID_ESP_SUB
+    opcoes["especialidades"] = [r["ESP"] for r in executar(
+        "SELECT DISTINCT " + _norm("ESPECIALIDADE") + " AS ESP"
+        " FROM credpf.credi01302"
+        " WHERE ESPECIALIDADE IS NOT NULL AND ID_ESP_SUB IS NULL"
+        " ORDER BY ESP")]
+
+    # Sub-especialidade = linha COM ID_ESP_SUB (dependente da especialidade pai)
+    if especialidade:
+        sql_sub = (
+            "SELECT DISTINCT " + _norm("e.ESPECIALIDADE") + " AS SUB"
+            + " FROM credpf.credi01302 e"
+            + " WHERE e.ID_ESP_SUB IS NOT NULL"
+            + " AND (SELECT " + _norm("p.ESPECIALIDADE")
+            + " FROM credpf.credi01302 p"
+            + " WHERE p.ID_ESPECIALIDADE = e.ID_ESP_SUB) = :esp"
+            + " ORDER BY SUB")
+        opcoes["subespecialidades"] = [r["SUB"] for r in executar(
+            sql_sub, {"esp": str(especialidade).upper()})]
+    else:
+        opcoes["subespecialidades"] = [r["SUB"] for r in executar(
+            "SELECT DISTINCT " + _norm("ESPECIALIDADE") + " AS SUB"
+            + " FROM credpf.credi01302"
+            + " WHERE ESPECIALIDADE IS NOT NULL AND ID_ESP_SUB IS NOT NULL"
+            + " ORDER BY SUB")]
+
+    opcoes["residencias"] = [r["RES"] for r in executar(
+        "SELECT DISTINCT " + _norm("NM_PROGRAMA") + " AS RES"
+        " FROM credpf.credi01303"
+        " WHERE NM_PROGRAMA IS NOT NULL"
+        " ORDER BY RES")]
+    return opcoes
 
 
 def consultar_medico(id_medico):

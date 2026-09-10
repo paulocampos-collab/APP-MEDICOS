@@ -36,7 +36,7 @@ def lista_medicos(
     uf: str | None = Query(None),
     cidade: str | None = Query(None),
     especialidade: str | None = Query(None),
-    sub_especialidade: bool | None = Query(None),
+    sub_especialidade: str | None = Query(None),
     residencia: str | None = Query(None),
     situacao_crm: str | None = Query(None),
     sexo: str | None = Query(None),
@@ -67,6 +67,22 @@ def lista_medicos(
             "offset": offset,
             "limite": limite,
             "tem_mais": (offset + len(resultados)) < total}
+
+
+# ---------------------------------------------------------------------------
+# Opções de filtro (dropdowns) — uf/cidade/especialidade/sub/residência
+# vêm DO BANCO; sexo e faixa etária são fixos (mockados)
+# ---------------------------------------------------------------------------
+@app.get("/api/v1/filtros")
+def opcoes_filtros(uf: str | None = Query(None), especialidade: str | None = Query(None)):
+    try:
+        opcoes = repositorio.obter_opcoes_filtros(uf=uf or None, especialidade=especialidade or None)
+    except Exception as e:
+        return JSONResponse(status_code=503, content={
+            "erro": "falha_ao_carregar_filtros", "detalhe": str(e)[:400]})
+    opcoes["sexos"] = ["M", "F"]
+    opcoes["faixas_etarias"] = ["ATE_29", "30_39", "40_49", "50_59", "60_MAIS"]
+    return {"modo": "mock" if config.USE_MOCK else "oracle", **opcoes}
 
 
 # ---------------------------------------------------------------------------

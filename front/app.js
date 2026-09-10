@@ -1,4 +1,4 @@
-import { carregarSaldo, buscarMedicos, fichaBasica, fichaAvancada } from './api.js';
+import { carregarSaldo, obterFiltros, buscarMedicos, fichaBasica, fichaAvancada } from './api.js';
 
 const $ = (id) => document.getElementById(id);
 const LIMITE = 50;
@@ -8,14 +8,54 @@ let acumulado = [];
 
 document.addEventListener('DOMContentLoaded', () => {
   carregarSaldo().then(renderSaldo);
+  carregarOpcoes();
   $('btnBuscar').addEventListener('click', () => buscar(true)); // reinicia a busca
   $('btnMais').addEventListener('click', () => buscar(false));  // próxima página (50)
   $('btnVoltar').addEventListener('click', () => mostrar('listaView'));
   $('btnExtrato').addEventListener('click', verExtrato);
   $('btnAvancado').addEventListener('click', perguntarAvancado);
   $('modalNao').addEventListener('click', fecharModal);
+  $('fUf').addEventListener('change', aoMudarUf);
+  $('fEspec').addEventListener('change', aoMudarEspecialidade);
   buscar(true);
 });
+
+// ---------------- DROPDOWNS (carregados do banco via /filtros) ----------------
+function preencherSelect(id, valores, rotuloVazio) {
+  const sel = $(id);
+  if (!sel) return;
+  const atual = sel.value;
+  sel.innerHTML = `<option value="">${rotuloVazio}</option>` +
+    (valores || []).map((v) => `<option value="${v}">${v}</option>`).join('');
+  if (atual && (valores || []).includes(atual)) sel.value = atual;
+}
+
+async function carregarOpcoes() {
+  const r = await obterFiltros();
+  if (!r.ok) {
+    const el = $('modoBadge');
+    if (el) el.textContent = 'FILTROS INDISPONÍVEIS';
+    return;
+  }
+  renderModo(r.data);
+  const d = r.data || {};
+  preencherSelect('fUf', d.ufs || [], 'Todas');
+  preencherSelect('fCidade', d.cidades || [], 'Todas');
+  preencherSelect('fEspec', d.especialidades || [], 'Todas');
+  preencherSelect('fSubEspec', d.subespecialidades || [], 'Todas');
+  preencherSelect('fResid', d.residencias || [], 'Todas');
+  preencherSelect('fSexo', d.sexos || ['M', 'F'], 'Todos');
+  preencherSelect('fFaixa', d.faixas_etarias || [], 'Todas');
+}
+
+async function aoMudarUf() {
+  const r = await obterFiltros($('fUf').value, '');
+  preencherSelect('fCidade', (r.data || {}).cidades || [], 'Todas');
+}
+async function aoMudarEspecialidade() {
+  const r = await obterFiltros('', $('fEspec').value);
+  preencherSelect('fSubEspec', (r.data || {}).subespecialidades || [], 'Todas');
+}
 
 function mostraErro(mensagem) {
   const box = $('listaLeads');
@@ -33,9 +73,9 @@ async function buscar(reiniciar) {
   if (reiniciar) { pagina = 0; acumulado = []; }
   const f = {
     uf: $('fUf').value, cidade: $('fCidade').value,
-    especialidade: $('fEspec').value, residencia: $('fResid').value,
-    situacao_crm: $('fSit').value, sexo: $('fSexo').value,
-    faixa_etaria: $('fFaixa').value,
+    especialidade: $('fEspec').value, sub_especialidade: $('fSubEspec').value,
+    residencia: $('fResid').value, situacao_crm: $('fSit').value,
+    sexo: $('fSexo').value, faixa_etaria: $('fFaixa').value,
     apenas_com_enriquecimento: $('fEnr').checked,
   };
   const res = await buscarMedicos(f, LIMITE, pagina * LIMITE);
@@ -80,7 +120,7 @@ function renderLeads(leads, data) {
 // ---------------- FICHA BÁSICA (débito por perfil) ----------------
 async function perguntarAbrirFicha(id) {
   medicoAtual = id;
-  const o = await fichaBasica(id); // sem confirmar: só mostra o custo
+  const o = await fichaBasica(id);
   if (!o.ok || o.data.erro) {
     mostraErro(o.data.detalhe || o.data.erro || `HTTP ${o.status}`);
     return;
@@ -113,7 +153,7 @@ function renderFicha(r) {
       <dt>Faculdade</dt><dd>${m.instituicao_graduacao || '—'} (${m.ano_conclusao || '—'})</dd>
     </div></div>`;
 
-  html += `<div class="bloco"><h4>CRMs por UF</h4><table><tr><th>CRM</th><th>UF</th><th>Situação</th></tr>`;
+  html += '<div class="bloco"><h4>CRMs por UF</h4><table><tr><th>CRM</th><th>UF</th><th>Situação</th></tr>';
   for (const c of m.crms || []) html += `<tr><td>${c.crm}</td><td>${c.uf}</td><td>${c.situacao}</td></tr>`;
   html += '</table></div>';
 
