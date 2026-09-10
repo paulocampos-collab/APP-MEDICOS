@@ -258,13 +258,51 @@ function renderFicha(r) {
 
   html += '<div class="bloco"><h4>Pesquisa PF (Credify)</h4>';
   if (r.pf && r.pf.dados_cadastrais) {
-    const dc = r.pf.dados_cadastrais;
+    // Credify retorna emails/telefones/enderecos como OBJETO {REGISTRO_1: {...}, REGISTRO_2: {...}}
+    // (não array). E tambem aceita o shape MOCK (lista de objetos). O helper
+    // `toList` normaliza os dois formatos para array de valores.
+    const toList = (x) => {
+      if (Array.isArray(x)) return x;
+      if (x && typeof x === 'object') return Object.values(x);
+      return [];
+    };
+    const normObj = (o) => {
+      if (!o || typeof o !== 'object') return {};
+      const out = {};
+      for (const k of Object.keys(o)) out[String(k).toLowerCase()] = o[k];
+      return out;
+    };
+    const dc = normObj(r.pf.dados_cadastrais);
+    const emails = toList(r.pf.emails).map(normObj).filter((x) => x.email || x.endereco);
+    const tels = toList(r.pf.telefones).map(normObj);
+    const ends = toList(r.pf.enderecos).map(normObj);
+    const emailStr = emails.map((x) => x.email || x.endereco || '').filter(Boolean).join(', ') || '—';
+    const telStr = tels.map((x) => {
+      const ddd = x.ddd || '';
+      const num = x.telefone || x.numero || '';
+      if (!ddd && !num) return '';
+      const tipo = x.tipo_contato_telefone || x.tipo || '';
+      return `${tipo ? tipo + ': ' : ''}(${ddd}) ${num}`;
+    }).filter(Boolean).join(' · ') || '—';
+    const endStr = ends.map((x) => {
+      const tp = x.tp_logradouro || x.tipo || '';
+      const lg = x.logradouro || '';
+      const nu = x.numero ? ', ' + x.numero : '';
+      const cm = x.complemento ? ' (' + x.complemento + ')' : '';
+      const br = x.bairro ? ' - ' + x.bairro : '';
+      const cd = [x.cidade, x.uf, x.cep].filter(Boolean).join('/');
+      return `${tp} ${lg}${nu}${cm}${br} (${cd})`.trim();
+    }).filter(Boolean).join(' | ') || '—';
     html += `<div class="kv">
-      <dt>Nome PF</dt><dd>${dc.NOME || dc.nome || '—'}</dd>
-      <dt>Nascimento</dt><dd>${dc.NASCIMENTO || dc.nascimento || '—'}</dd>
-      <dt>E-mail</dt><dd>${((r.pf.emails)||[]).map((x) => x.ENDERECO || x.endereco || '').filter(Boolean).join(', ') || '—'}</dd>
-      <dt>Telefones</dt><dd>${((r.pf.telefones)||[]).map((x) => `(${x.DDD||x.ddd||''}) ${x.NUMERO||x.numero||''}`).filter(Boolean).join(', ') || '—'}</dd>
-      <dt>Endereço PF</dt><dd>${((r.pf.enderecos)||[]).map((x) => x.LOGRADOURO || x.logradouro || '').filter(Boolean).join('; ') || '—'}</dd>
+      <dt>Nome PF</dt><dd>${dc.nomerazao || dc.nome || '—'}</dd>
+      <dt>CPF</dt><dd>${dc.cpfcnpj || dc.cpf || '—'}</dd>
+      <dt>Nascimento</dt><dd>${dc.nascfund || dc.nascimento || '—'}</dd>
+      <dt>Sexo</dt><dd>${dc.sexo || '—'}</dd>
+      <dt>Idade</dt><dd>${dc.idade || '—'}</dd>
+      <dt>Mãe</dt><dd>${dc.nomemae || '—'}</dd>
+      <dt>E-mail</dt><dd>${emailStr}</dd>
+      <dt>Telefones</dt><dd>${telStr}</dd>
+      <dt>Endereço PF</dt><dd style="font-size:12px">${endStr}</dd>
       <dt>Quadro societário</dt><dd><i>não incluído no nível básico</i></dd>
     </div>`;
   } else if (r.pf && r.pf.aviso) {
