@@ -342,53 +342,85 @@ function renderFicha(r) {
   const anoConclusao = pick(m, 'ano_conclusao','ANO_CONCLUSAO');
 
   // HEADER DO MÉDICO — alinha em colunas definidas (avatar | nome | faculdade).
-  // faculdade + ano conclusao vêm de dados_medico (não PF), e são mostrados ao
-  // lado do nome. Quando ausentes, "—" explicitamente.
+  // Por design: no header fica APENAS o PERFIL e o CPF. Tokens debitados /
+  // custo saem do bloco do nome — vão para o cabeçalho da página PF,
+  // onde fazem sentido com o custo real da abertura.
   let html = `<div class="ficha-cab ficha-cab-basica" role="group" aria-label="Identificação do médico">
       <div class="avatar" aria-hidden="true">${iniciais}</div>
       <div class="ficha-nome">
         <h1>${nomeMed}</h1>
         <div class="sub">Nome social: ${pick(m, 'nome_social','NOME_SOCIAL','nomeSocial') || 'não informado'}</div>
         <div class="sub">Idade: ${idade || '—'}${sexo ? ' · Gênero: ' + sexo : ''}</div>
-        <div class="sub">Faculdade: ${faculdade || '—'}${anoConclusao ? ' · Conclusão: ' + anoConclusao : ''}</div>
         <div class="ficha-chips">
-          <span class="perfil-badge">PERFIL ${r.perfil || '—'} · ${(r.custo_tokens || 0).toLocaleString('pt-BR')} tokens</span>
-          <span class="chip teal">${(r.tokens_cobrados || 0).toLocaleString('pt-BR')} tokens debitados</span>
+          <span class="perfil-badge">PERFIL ${r.perfil || '—'}</span>
           <span class="fonte-badge">CPF ${cpfMed}</span>${cpfChip}
         </div>
       </div>
     </div>`;
 
-  // SEÇÃO 1 — DADOS CADASTRAIS (apenas CRMs, sem custo)
-  html += '<div class="ficha-secao"><span class="num">1</span><div><h3>📒 Dados cadastrais</h3><p>CRMs e situação profissional. Especialidades listadas na próxima seção.</p></div></div>';
-  html += '<div class="bloco">';
+  // SEÇÃO 1 — DADOS CADASTRAIS (PF + Faculdade)
+  // Fonte CONFIRMADA via leitura do payload em /api/v1/medicos/{id}/ficha-basica:
+  //   - dados_medico (SELECT em credi01300_new — app/db/queries.py:147-151):
+  //     id_medico, nome, nome_social, cpf, ano_conclusao, instituicao_graduacao
+  //   - pf.dados_cadastrais (Credify — MOCK em app/mock_data.py:85):
+  //     NOME, SEXO, NASCIMENTO, NOME_MAE
+  // Campos NAO presentes no payload atual — exibidos como "—":
+  //   - SITUACAO (PF não retorna; CRM sim — mantido na seção 1 como tabela auxiliar)
+  //   - INSTITUICAO_REVALIDACAO / ANO_REVALIDACAO (não há coluna no SELECT atual;
+  //     quando entrar, basta adicionar aqui a chamada pick())
+  html += '<div class="ficha-secao"><span class="num">1</span><div><h3>📒 Dados cadastrais</h3><p>Receita Federal (PF) + dados de formação do médico (credpf.credi01300_new).</p></div></div>';
+  html += '<div class="bloco"><div class="kv">';
+  if (r.pf && r.pf.dados_cadastrais) {
+    const dc = normObj(r.pf.dados_cadastrais);
+    // Idade preferida do payload (Credify OU); senão calculada de NASCIMENTO.
+    let idadeStr = dc.idade || '';
+    if (!idadeStr && dc.nascimento) {
+      const m2 = String(dc.nascimento).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (m2) {
+        const d = new Date(+m2[3], +m2[2] - 1, +m2[1]);
+        const hoje = new Date();
+        let idade = hoje.getFullYear() - d.getFullYear();
+        if (hoje.getMonth() < d.getMonth() || (hoje.getMonth() === d.getMonth() && hoje.getDate() < d.getDate())) idade--;
+        if (idade >= 0 && idade < 130) idadeStr = idade + ' anos';
+      }
+    }
+    html += `<dt>Nome</dt><dd>${dc.nomerazao || dc.nome || '—'}</dd>`;
+    html += `<dt>CPF</dt><dd>${dc.cpfcnpj || dc.cpf || '—'}</dd>`;
+    html += `<dt>Nascimento</dt><dd>${dc.nascfund || dc.nascimento || '—'}${idadeStr ? ' · ' + idadeStr : ''}</dd>`;
+    html += `<dt>Sexo</dt><dd>${dc.sexo || '—'}</dd>`;
+    html += `<dt>Mãe</dt><dd>${dc.nomemae || '—'}</dd>`;
+    html += `<dt>Situação</dt><dd>${dc.situacaoreceita || dc.situacao || '—'}</dd>`;
+  } else if (r.pf && r.pf.aviso) {
+    html += `<dt>Pessoa física</dt><dd class="meta">${r.pf.aviso}</dd>`;
+  } else {
+    html += '<dt>Pessoa física</dt><dd class="meta">— Sem informação de Receita Federal para este médico.</dd>';
+  }
+  // Faculdade / Revalidação (credpf.credi01300_new)
+  html += `<dt>Instituição graduação</dt><dd>${faculdade || '—'}</dd>`;
+  html += `<dt>Instituição revalidação</dt><dd>${pick(m, 'instituicao_revalidacao','INSTITUICAO_REVALIDACAO') || '—'}</dd>`;
+  html += `<dt>Ano conclusão</dt><dd>${anoConclusao || '—'}</dd>`;
+  html += `<dt>Ano revalidação</dt><dd>${pick(m, 'ano_revalidacao','ANO_REVALIDACAO') || '—'}</dd>`;
+  html += '</div></div>';
+
+  // Tabela auxiliar de CRMs (mantida — cada CRM com seu status)
+  html += '<div class="crm-grupo" style="margin-top:14px"><div class="crm-cabecalho"><span class="chip teal">CRMs</span></div>';
   if (!crms.length) {
     html += '<p class="meta">— Não possui CRM registrado.</p>';
   } else {
+    html += '<table class="dados-tabela"><tr><th>UF</th><th>CRM</th><th>Situação</th><th>Inscrição</th></tr>';
     for (const c of crms) {
-      const idcrm = pick(c, 'id_crm','ID_CRM');
-      const principalId = pick(m, 'id_crm_principal','ID_CRM_PRINCIPAL');
-      const isPrincipal = principalId !== undefined && String(principalId) === String(idcrm);
-      html += `<div class="crm-grupo"><div class="crm-cabecalho">
-          <span class="chip"><b>${pick(c, 'uf','UF') || '—'}</b> · ${pick(c, 'crm','CRM') || '—'}</span>
-          <span class="chip ${situacaoChip(pick(c, 'situacao','SITUACAO'))}">${pick(c, 'situacao','SITUACAO') || '—'}</span>
-          <span class="chip ${isPrincipal ? 'teal' : ''}">${isPrincipal ? 'Principal' : 'Secundário'}</span>
-        </div>
-        <div class="kv">
-          <dt>Inscrição</dt><dd>${pick(c, 'data_inscricao','DATA_INSCRICAO') || '—'}</dd>
-          <dt>Tipo</dt><dd>${pick(c, 'tipo_inscricao','TIPO_INSCRICAO') || (isPrincipal ? 'Principal' : 'Secundário') || '—'}</dd>
-        </div></div>`;
+      html += `<tr><td>${pick(c, 'uf','UF') || '—'}</td><td>${pick(c, 'crm','CRM') || '—'}</td>`
+        + `<td><span class="chip ${situacaoChip(pick(c, 'situacao','SITUACAO'))}">${pick(c, 'situacao','SITUACAO') || '—'}</span></td>`
+        + `<td>${pick(c, 'dt_prim_inscricao_uf','DT_PRIM_INSCRICAO_UF','data_inscricao','DATA_INSCRICAO') || '—'}</td></tr>`;
     }
+    html += '</table>';
   }
   html += '</div>';
 
-  // SEÇÃO 2 — ESPECIALIDADES & RQE (lista única deduplicada por especialidade+rqe).
-  // Bruna tem Cardiologia em 3 CRMs (GO/MT/DF) com mesmo RQE 12979; sem dedupe
-  // aparecia 3×. Esta seção NÃO repete por estado — apenas lista o que existe.
+  // SEÇÃO 2 — ESPECIALIDADES & RQE
   html += '<div class="ficha-secao"><span class="num">2</span><div><h3>🎓 Especialidades &amp; RQE</h3><p>Lista única de especialidades registradas (sub-especialidades marcadas).</p></div></div>';
   html += '<div class="bloco"><div class="crm-especialidades">';
   let temEsp = false;
-  // mapa para deduplicar: chave = (especialidade + RQE) normalizadas.
   const espSeen = new Set();
   const espColecao = [];
   const collect = (lista) => {
@@ -413,10 +445,10 @@ function renderFicha(r) {
     if (rqe) html += `<span class="chip teal">RQE ${rqe}</span>`;
     if (pick(e, 'flag_sub','FLAG_SUB') || pick(e, 'id_esp_sub','ID_ESP_SUB')) html += '<span class="chip amber">sub</span>';
   }
-  if (!temEsp) html = '<div class="bloco"><p class="meta">— Não possui especialidade registrada.</p>';
+  if (!temEsp) html = '<p class="meta">— Não possui especialidade registrada.</p>';
   html += '</div></div>';
 
-  // SEÇÃO 3 — RESIDÊNCIA MÉDICA (separada; "Não possui" quando vazio)
+  // SEÇÃO 3 — RESIDÊNCIA MÉDICA
   const resid = normArr(m.residencias);
   html += '<div class="ficha-secao"><span class="num">3</span><div><h3>🏥 Residência médica</h3><p>Programas de residência concluídos pelo médico.</p></div></div>';
   html += '<div class="bloco">';
@@ -426,50 +458,28 @@ function renderFicha(r) {
     for (const x of resid) {
       const prog = pick(x, 'programa','NM_PROGRAMA','PROGRAMA') || '—';
       const inst = pick(x, 'instituicao','NM_INSTITUICAO','INSTITUICAO') || '—';
-      const concl = pick(x, 'ano_conclusao','ANO_CONCLUSAO','CONCLUSAO') || '—';
+      const concl = pick(x, 'dt_termino','DT_TERMINO','ano_conclusao','ANO_CONCLUSAO','CONCLUSAO') || '—';
+      const inicio = pick(x, 'dt_inicio','DT_INICIO') || '';
       const dur = pick(x, 'duracao','DURACAO');
       html += `<div class="crm-grupo"><div class="crm-cabecalho">
           <span class="chip teal">${prog}</span>
+          <span class="chip">${inst}</span>
         </div>
         <div class="kv">
-          <dt>Instituição</dt><dd>${inst}</dd>
+          <dt>Início</dt><dd>${inicio || '—'}</dd>
           <dt>Conclusão</dt><dd>${concl}${dur ? ' · ' + dur : ''}</dd>
         </div></div>`;
     }
   }
   html += '</div>';
 
-  // SEÇÃO 4 — Receita Federal (PF) + dados de contato (uma seção só).
-  // Tudo vem de r.pf (dados_cadastrais + emails + telefones + enderecos).
-  // Label interno "pf_pesquisa" foi removido — nomes voltados ao usuário.
-  html += '<div class="ficha-secao"><span class="num">4</span><div><h3>🔎 Receita Federal (PF)</h3><p>Dados cadastrais e dados de contato da pessoa física.</p></div></div>';
-  html += '<div class="pf-bloco">';
-  if (r.pf && r.pf.dados_cadastrais) {
-    const dc = normObj(r.pf.dados_cadastrais);
-    // Idade: preferimos o campo direto (CREDI idade), senão computamos a partir
-    // de NASCIMENTO (formato dd/mm/aaaa vindo do MOCK Credify).
-    let idadeStr = dc.idade || '';
-    if (!idadeStr && dc.nascimento) {
-      const m = String(dc.nascimento).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      if (m) {
-        const d = new Date(+m[3], +m[2] - 1, +m[1]);
-        const hoje = new Date();
-        let idade = hoje.getFullYear() - d.getFullYear();
-        if (hoje.getMonth() < d.getMonth() || (hoje.getMonth() === d.getMonth() && hoje.getDate() < d.getDate())) idade--;
-        if (idade >= 0 && idade < 130) idadeStr = idade + ' anos';
-      }
-    }
-    html += `<div class="kv">
-      <dt>Nome</dt><dd>${dc.nomerazao || dc.nome || '—'}</dd>
-      <dt>CPF</dt><dd>${dc.cpfcnpj || dc.cpf || '—'}</dd>
-      <dt>Nascimento</dt><dd>${dc.nascfund || dc.nascimento || '—'}${idadeStr ? ' · ' + idadeStr : ''}</dd>
-      <dt>Sexo</dt><dd>${dc.sexo || '—'}</dd>
-      <dt>Mãe</dt><dd>${dc.nomemae || '—'}</dd>
-      <dt>Situação</dt><dd>${dc.situacaoreceita || dc.situacao || '—'}</dd>
-      <dt>Quadro societário</dt><dd><i>não incluído no nível básico</i></dd>
-    </div>`;
-
-    // helper pt-BR (MOCK traz CAIXA ALTA; PROD pode vir minúsculo)
+  // SEÇÃO 4 — Dados de contato (telefones, e-mails e endereços)
+  // Limite: 5 entradas de cada (r.pf.emails / r.pf.telefones / r.pf.enderecos).
+  // Helper fp() le CAIXA ALTA OU minúsculo (MOCK vem CAIXA ALTA, PROD pode vir
+  // minúsculo).
+  html += '<div class="ficha-secao"><span class="num">4</span><div><h3>📞 Dados de contato</h3><p>Telefones, e-mails e endereços da Receita Federal (máx. 5 de cada).</p></div></div>';
+  html += '<div class="bloco">';
+  if (r.pf && (r.pf.emails || r.pf.telefones || r.pf.enderecos)) {
     const fp = (obj, ...keys) => {
       if (!obj) return undefined;
       for (const k of keys) {
@@ -483,12 +493,12 @@ function renderFicha(r) {
     const emailsRaw = r.pf.emails;
     const telsRaw = r.pf.telefones;
     const endsRaw = r.pf.enderecos;
-    const emails = Array.isArray(emailsRaw) ? emailsRaw.map(normObj)
-      : (emailsRaw && typeof emailsRaw === 'object' ? Object.values(emailsRaw).map(normObj) : []);
-    const tels = Array.isArray(telsRaw) ? telsRaw.map(normObj)
-      : (telsRaw && typeof telsRaw === 'object' ? Object.values(telsRaw).map(normObj) : []);
-    const ends = Array.isArray(endsRaw) ? endsRaw.map(normObj)
-      : (endsRaw && typeof endsRaw === 'object' ? Object.values(endsRaw).map(normObj) : []);
+    const emails = (Array.isArray(emailsRaw) ? emailsRaw.map(normObj)
+      : (emailsRaw && typeof emailsRaw === 'object' ? Object.values(emailsRaw).map(normObj) : [])).slice(0, 5);
+    const tels = (Array.isArray(telsRaw) ? telsRaw.map(normObj)
+      : (telsRaw && typeof telsRaw === 'object' ? Object.values(telsRaw).map(normObj) : [])).slice(0, 5);
+    const ends = (Array.isArray(endsRaw) ? endsRaw.map(normObj)
+      : (endsRaw && typeof endsRaw === 'object' ? Object.values(endsRaw).map(normObj) : [])).slice(0, 5);
 
     const telBlocos = tels.map((t) => {
       const ddd = fp(t, 'DDD','ddd');
@@ -524,7 +534,7 @@ function renderFicha(r) {
       <div class="contato-col"><div class="contato-titulo">📍 Endereços</div>${endBlocos}</div>
     </div>`;
   } else if (r.pf && r.pf.aviso) {
-    html += `<div class="aviso" role="alert">ⓘ ${r.pf.aviso}</div>`;
+    html += `<div class="aviso" role="status">ⓘ ${r.pf.aviso}</div>`;
   } else {
     html += '<div class="aviso" role="status">Médico sem CPF — apenas dados cadastrais.</div>';
   }
