@@ -196,19 +196,51 @@ def detalhe_medico(id_medico):
             "residencias": RESIDENCIAS.get(m["id_medico"], []),
             "endereco_principal": escolher_principal(ENDERECOS.get(m["id_medico"], [])),
         }
-    m = consultar_medico(id_medico)
+    # ORACLE: falhas parciais (ex.: coluna errada em credi01303) NAO podem
+    # derrubar a ficha inteira. Cada sub-query entra em try/except e devolve
+    # lista vazia + entrada em "_diagnostico_oracle" para a UI mostrar o aviso.
+    diag = []
+    try:
+        m = consultar_medico(id_medico)
+    except Exception as e:
+        diag.append({"secao": "medico", "erro": str(e)[:300]})
+        return {"id_medico": id_medico, "_diagnostico_oracle": diag}
     if not m:
         return None
-    crms = consultar_crms(id_medico)
+
+    try:
+        crms = consultar_crms(id_medico)
+    except Exception as e:
+        diag.append({"secao": "crms", "erro": str(e)[:300]})
+        crms = []
+    try:
+        esp_map = {c["id_crm"]: consultar_especialidades(id_medico) for c in (crms or [])}
+    except Exception as e:
+        diag.append({"secao": "especialidades", "erro": str(e)[:300]})
+        esp_map = {}
+    try:
+        resid = consultar_residencias(id_medico)
+    except Exception as e:
+        diag.append({"secao": "residencias", "erro": str(e)[:300]})
+        resid = []
+    try:
+        ends = consultar_enderecos(id_medico)
+    except Exception as e:
+        diag.append({"secao": "enderecos", "erro": str(e)[:300]})
+        ends = []
     return {
-        "id_medico": m["ID_MEDICO"], "nome": m["NOME"], "nome_social": m.get("NOME_SOCIAL"),
-        "cpf": str(m.get("CPF")) if m.get("CPF") else None,
-        "sexo": None, "ano_conclusao": m.get("ANO_CONCLUSAO"),
-        "instituicao_graduacao": m.get("INSTITUICAO_GRADUACAO"),
-        "crms": crms,
-        "especialidades": {c["ID_CRM"]: consultar_especialidades(id_medico) for c in crms},
-        "residencias": consultar_residencias(id_medico),
-        "endereco_principal": escolher_principal(consultar_enderecos(id_medico)),
+        "id_medico":              m["id_medico"],
+        "nome":                    m.get("nome"),
+        "nome_social":             m.get("nome_social"),
+        "cpf":                     str(m.get("cpf")) if m.get("cpf") else None,
+        "sexo":                    None,
+        "ano_conclusao":           m.get("ano_conclusao"),
+        "instituicao_graduacao":   m.get("instituicao_graduacao"),
+        "crms":                    crms,
+        "especialidades":          esp_map,
+        "residencias":             resid,
+        "endereco_principal":      escolher_principal(ends),
+        "_diagnostico_oracle":     diag or None,
     }
 
 

@@ -136,41 +136,70 @@ def consultar_medicos_com_filtros(filtros=None, limite=50, offset=0):
 
 # =========================================================================
 # Detalhe do médico (por ID — sempre pontual)
+# IMPORTANTE: nomes reais do Oracle sao CAIXA ALTA (SELECT eh case-insensitive
+# para resolver a coluna, mas o ALIAS sem aspas eh uppercasedao). Para devolver
+# dicts com chaves em CAIXA BAIXA (consumido por app/mock_data.py e pelo
+# frontend em front/app.js -> renderFicha) usamos aliases com aspas duplas,
+# que preservam caixa: "nome_alias".
 # =========================================================================
 SQL_MEDICO = """
-SELECT id_medico, nome, nome_social, cpf, ano_conclusao, instituicao_graduacao
+SELECT ID_MEDICO          AS "id_medico",
+       NOME               AS "nome",
+       NOME_SOCIAL        AS "nome_social",
+       CPF                AS "cpf",
+       ANO_CONCLUSAO      AS "ano_conclusao",
+       INSTITUICAO_GRADUACAO AS "instituicao_graduacao"
 FROM   credpf.credi01300_new
-WHERE  id_medico = :id
+WHERE  ID_MEDICO = :id
 """
 
-# Chaves em CAIXA BAIXA para casar exatamente com app/mock_data.py e
-# com o que o frontend (front/app.js -> renderFicha) lê. Sem isso,
-# renderFicha recebe 'CRM','UF','SITUACAO' (uppercase do Oracle) e imprime
-# 'undefined' em todas as colunas (bug visível na captura do cliente).
 SQL_CRMS = """
-SELECT id_medico, id_crm, crm, uf, situacao, dt_prim_inscricao_uf
+SELECT ID_MEDICO              AS "id_medico",
+       ID_CRM                 AS "id_crm",
+       CRM                    AS "crm",
+       UF                     AS "uf",
+       SITUACAO               AS "situacao",
+       DT_PRIM_INSCRICAO_UF   AS "dt_prim_inscricao_uf"
 FROM   credpf.credi01301
-WHERE  id_medico = :id
+WHERE  ID_MEDICO = :id
 """
 
 SQL_ESPECIALIDADES = """
-SELECT id_especialidade, id_crm, especialidade, rqe, flag_sub, id_esp_sub
+SELECT ID_ESPECIALIDADE  AS "id_especialidade",
+       ID_CRM            AS "id_crm",
+       ESPECIALIDADE     AS "especialidade",
+       RQE               AS "rqe",
+       FLAG_SUB          AS "flag_sub",
+       ID_ESP_SUB        AS "id_esp_sub"
 FROM   credpf.credi01302
-WHERE  id_crm IN (SELECT id_crm FROM credpf.credi01301 WHERE id_medico = :id)
+WHERE  ID_CRM IN (SELECT ID_CRM FROM credpf.credi01301 WHERE ID_MEDICO = :id)
 """
 
 SQL_RESIDENCIAS = """
-SELECT id_residencia, programa AS nm_programa, instituicao AS nm_instituicao,
-       sg_uf, dt_inicio, dt_termino
+SELECT ID_RESIDENCIA   AS "id_residencia",
+       NM_PROGRAMA     AS "programa",
+       NM_INSTITUICAO  AS "instituicao",
+       SG_UF           AS "sg_uf",
+       DT_INICIO       AS "dt_inicio",
+       DT_TERMINO      AS "dt_termino"
 FROM   credpf.credi01303
-WHERE  id_medico = :id
+WHERE  ID_MEDICO = :id
 """
 
 SQL_ENDERECOS = """
-SELECT id_medico, nu_addr, co_type_addr, co_type_logr, ds_name_logr,
-       co_numb_logr, ds_cmpl_logr, ds_dist, ds_city, co_stte, co_zipc
+SELECT ID_MEDICO          AS "id_medico",
+       NU_ADDR            AS "nu_addr",
+       CO_TYPE_ADDR       AS "co_type_addr",
+       CO_TYPE_LOGR       AS "co_type_logr",
+       DS_NAME_LOGR       AS "ds_name_logr",
+       CO_NUMB_LOGR       AS "co_numb_logr",
+       DS_CMPL_LOGR       AS "ds_cmpl_logr",
+       DS_DIST            AS "ds_dist",
+       DS_CITY            AS "ds_city",
+       CO_STTE            AS "co_stte",
+       CO_ZIPC            AS "co_zipc"
 FROM   Paulo.tmp_endereco_medico_principal
-WHERE  id_medico = :id
+WHERE  ID_MEDICO = :id
 """
 
 
